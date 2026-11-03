@@ -2,17 +2,19 @@
 <html lang="zh-TW">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-  <title>3D 平面冒險島・戶政大探索</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>梓官戶政 3D 知識大冒險</title>
   <!-- Tailwind CSS -->
   <script src="https://cdn.tailwindcss.com"></script>
   <!-- Three.js (r128) -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+  <!-- Canvas Confetti -->
+  <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"></script>
   <!-- FontAwesome -->
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-  
+
   <style>
-    @import url('https://fonts.googleapis.com/css2?family=Fredoka:wght@400;600;700&family=Noto+Sans+TC:wght@400;600;800&display=swap');
+    @import url('https://fonts.googleapis.com/css2?family=Fredoka:wght@500;700&family=Noto+Sans+TC:wght@500;700;900&display=swap');
     * {
       font-family: 'Fredoka', 'Noto Sans TC', sans-serif;
       user-select: none;
@@ -23,282 +25,289 @@
       margin: 0;
       padding: 0;
       overflow: hidden;
-      background: #74b9ff;
+      background: #7dd3fc;
     }
-    #webgl-canvas-container {
+    #canvas-container {
       width: 100vw;
       height: 100vh;
       position: absolute;
-      top: 0;
       left: 0;
+      top: 0;
       z-index: 1;
     }
     .glass-panel {
-      background: rgba(255, 255, 255, 0.88);
+      background: rgba(255, 255, 255, 0.92);
       backdrop-filter: blur(14px);
       -webkit-backdrop-filter: blur(14px);
       border: 2px solid rgba(255, 255, 255, 0.95);
-      box-shadow: 0 14px 35px -8px rgba(15, 23, 42, 0.18), 0 0 0 1px rgba(255, 255, 255, 0.5) inset;
+      box-shadow: 0 10px 30px -5px rgba(0, 0, 0, 0.15);
     }
-    .floating-beacon {
-      animation: beaconBob 2s infinite ease-in-out;
+    .btn-bounce:active {
+      transform: scale(0.94);
     }
-    @keyframes beaconBob {
-      0%, 100% { transform: translateY(0); }
-      50% { transform: translateY(-8px); }
+    .stamp-seal {
+      border: 3.5px dashed #dc2626;
+      color: #b91c1c;
+      transform: rotate(-10deg);
     }
-    .pulse-glow {
-      animation: pulseGlow 1.8s infinite;
+    .beacon-pulse {
+      animation: pulseGlow 2s infinite ease-in-out;
     }
     @keyframes pulseGlow {
-      0%, 100% { box-shadow: 0 0 15px rgba(245, 158, 11, 0.6); }
-      50% { box-shadow: 0 0 35px rgba(245, 158, 11, 1); }
-    }
-    /* Touch Controls */
-    .dpad-btn {
-      touch-action: manipulation;
+      0%, 100% { transform: scale(1); opacity: 0.8; }
+      50% { transform: scale(1.08); opacity: 1; }
     }
   </style>
 </head>
 <body class="relative w-screen h-screen">
 
-  <!-- 3D Canvas -->
-  <div id="webgl-canvas-container"></div>
+  <!-- 3D 渲染畫布容器 -->
+  <div id="canvas-container"></div>
 
-  <!-- Top Navigation & Quest Progress Bar -->
-  <div class="absolute top-4 left-0 right-0 z-20 flex justify-between items-start px-4 md:px-8 pointer-events-none">
-    <!-- Objective Bar -->
-    <div class="glass-panel px-4 py-3 rounded-2xl flex items-center space-x-3 pointer-events-auto max-w-md shadow-lg">
-      <div id="target-icon" class="w-10 h-10 rounded-xl bg-gradient-to-tr from-amber-400 to-amber-200 flex items-center justify-center text-xl text-white shadow-md">
-        📍
-      </div>
+  <!-- 頂部精簡資訊列 (移除遮擋視野的距離標籤) -->
+  <header class="fixed top-3 left-3 right-3 z-20 flex justify-between items-center pointer-events-none">
+    <div class="glass-panel px-3.5 py-1.5 rounded-2xl flex items-center gap-2 pointer-events-auto border-amber-300">
+      <span class="text-2xl">🪙</span>
       <div>
-        <div class="text-[11px] font-bold text-cyan-700 tracking-wider uppercase flex items-center space-x-1.5">
-          <span class="inline-block w-2 h-2 rounded-full bg-cyan-500 animate-ping"></span>
-          <span id="quest-stage-label">目前探索任務（第 1 / 6 關）</span>
-        </div>
-        <h2 id="quest-objective-title" class="text-sm sm:text-base font-extrabold text-slate-800 leading-snug">
-          跟隨光柱前進，前往【良緣神殿】
-        </h2>
+        <div class="text-[10px] text-slate-500 font-bold leading-tight">目前累積金幣</div>
+        <div id="ui-coins" class="text-base sm:text-lg font-black text-amber-600 leading-tight">0 / 1200</div>
       </div>
     </div>
 
-    <!-- Right Control Utilities -->
-    <div class="flex items-center space-x-2 pointer-events-auto">
-      <div class="glass-panel px-3.5 py-2.5 rounded-2xl flex items-center space-x-2 text-xs font-black text-rose-600 shadow-md">
-        <i class="fa-solid fa-ghost text-base text-rose-500"></i>
-        <span>擊敗魔物：<span id="monster-counter">0</span></span>
+    <!-- 玩家名稱與關卡進度 -->
+    <div class="glass-panel px-3.5 py-1.5 rounded-2xl flex items-center gap-2.5 pointer-events-auto border-sky-300">
+      <div id="ui-avatar-badge" class="w-7 h-7 rounded-xl bg-amber-400 text-white flex items-center justify-center text-sm font-black shadow">👧</div>
+      <div>
+        <div id="ui-player-title" class="text-[10px] text-slate-500 font-bold leading-tight">探險員：梓官小探險家</div>
+        <div id="ui-progress" class="text-xs sm:text-sm font-black text-sky-700 leading-tight">考驗：0/6 關 ｜ 踩怪：0/4</div>
       </div>
-      <div class="glass-panel px-3.5 py-2.5 rounded-2xl flex items-center space-x-2 text-xs font-black text-amber-600 shadow-md">
-        <i class="fa-solid fa-coins text-base text-amber-500"></i>
-        <span id="coin-counter">0</span>
-      </div>
-      <button id="btn-sound" class="glass-panel w-10 h-10 rounded-2xl flex items-center justify-center text-slate-700 hover:text-cyan-600 active:scale-95 transition shadow-md">
-        <i class="fa-solid fa-volume-high text-base"></i>
-      </button>
-      <button id="btn-help" class="glass-panel w-10 h-10 rounded-2xl flex items-center justify-center text-slate-700 hover:text-cyan-600 active:scale-95 transition shadow-md">
-        <i class="fa-solid fa-circle-question text-base text-cyan-600"></i>
-      </button>
     </div>
-  </div>
+  </header>
 
-  <!-- Interactive Proximity Prompt (Pop up only when standing in Checkpoint Circle & NO modal is open) -->
-  <div id="proximity-prompt" class="hidden absolute bottom-36 md:bottom-24 left-1/2 -translate-x-1/2 z-20 pointer-events-auto transition-all animate-bounce">
-    <button id="btn-open-quiz" class="glass-panel px-6 py-3 rounded-full border-2 border-amber-400 bg-amber-50/95 text-amber-900 font-extrabold text-sm sm:text-base shadow-2xl flex items-center space-x-2.5 hover:scale-105 active:scale-95 transition">
-      <span class="w-3 h-3 rounded-full bg-amber-500 animate-ping"></span>
-      <span id="prompt-text">已到達關卡！點擊或按 [E] 進行戶政考驗</span>
-      <i class="fa-solid fa-arrow-right-long text-amber-600"></i>
+  <!-- 接近目標時的互動提示按鈕 -->
+  <div id="interaction-prompt" class="fixed bottom-24 md:bottom-12 left-1/2 -translate-x-1/2 z-50 hidden pointer-events-auto">
+    <button id="btn-interact" class="btn-bounce bg-gradient-to-r from-amber-500 via-orange-500 to-amber-500 text-white font-extrabold px-7 py-3.5 rounded-full shadow-2xl border-2 border-white flex items-center gap-2.5 text-sm sm:text-base animate-bounce cursor-pointer">
+      <span id="prompt-icon">✨</span>
+      <span id="prompt-text">進入考驗 (按 E 或點擊)</span>
     </button>
   </div>
 
-  <!-- Distance / Compass Indicator toward Next Goal -->
-  <div class="absolute bottom-24 md:bottom-6 left-1/2 -translate-x-1/2 z-10 pointer-events-none">
-    <div class="glass-panel px-4 py-2 rounded-full text-xs font-bold text-slate-700 shadow-md flex items-center space-x-2">
-      <span id="compass-arrow" class="inline-block transition-transform duration-100 text-cyan-600 font-black text-sm">⬆️</span>
-      <span>目標距離：<span id="goal-distance" class="text-cyan-700 font-extrabold font-mono">0</span> 公尺</span>
-      <span class="text-slate-300">|</span>
-      <span class="text-slate-500 hidden sm:inline">鍵盤 <kbd class="px-1.5 py-0.5 bg-slate-200 text-slate-800 rounded font-mono">W</kbd><kbd class="px-1.5 py-0.5 bg-slate-200 text-slate-800 rounded font-mono">A</kbd><kbd class="px-1.5 py-0.5 bg-slate-200 text-slate-800 rounded font-mono">S</kbd><kbd class="px-1.5 py-0.5 bg-slate-200 text-slate-800 rounded font-mono">D</kbd> 或方向鍵移動，<kbd class="px-2 py-0.5 bg-slate-200 text-slate-800 rounded font-mono">空白鍵</kbd> 跳躍踩怪</span>
-    </div>
-  </div>
-
-  <!-- Interactive Proximity Prompt (Pop up only when standing in Checkpoint Circle) -->
-  <div id="proximity-prompt" class="hidden absolute top-24 left-1/2 -translate-x-1/2 z-30 pointer-events-auto transition-all animate-bounce">
-    <button id="btn-open-quiz" class="glass-panel px-6 py-3 rounded-full border-2 border-amber-400 bg-amber-50/95 text-amber-900 font-extrabold text-sm sm:text-base shadow-2xl flex items-center space-x-2.5 hover:scale-105 active:scale-95 transition">
-      <span class="w-3 h-3 rounded-full bg-amber-500 animate-ping"></span>
-      <span id="prompt-text">已到達關卡！點擊或按 [E] 進行戶政考驗</span>
-      <i class="fa-solid fa-arrow-right-long text-amber-600"></i>
-    </button>
-  </div>
-
-  <!-- Distance / Compass Indicator toward Next Goal -->
-  <div class="absolute bottom-28 md:bottom-6 left-1/2 -translate-x-1/2 z-20 pointer-events-none">
-    <div class="glass-panel px-4 py-2 rounded-full text-xs font-bold text-slate-700 shadow-md flex items-center space-x-2">
-      <span id="compass-arrow" class="inline-block transition-transform duration-100 text-cyan-600 font-black text-sm">⬆️</span>
-      <span>目標距離：<span id="goal-distance" class="text-cyan-700 font-extrabold font-mono">0</span> 公尺</span>
-      <span class="text-slate-300">|</span>
-      <span class="text-slate-500 hidden sm:inline">鍵盤 <kbd class="px-1.5 py-0.5 bg-slate-200 text-slate-800 rounded font-mono">W</kbd><kbd class="px-1.5 py-0.5 bg-slate-200 text-slate-800 rounded font-mono">A</kbd><kbd class="px-1.5 py-0.5 bg-slate-200 text-slate-800 rounded font-mono">S</kbd><kbd class="px-1.5 py-0.5 bg-slate-200 text-slate-800 rounded font-mono">D</kbd> 或方向鍵移動，<kbd class="px-2 py-0.5 bg-slate-200 text-slate-800 rounded font-mono">空白鍵</kbd> 跳躍</span>
-    </div>
-  </div>
-
-  <!-- On-Screen Virtual Controls for Mobile Devices -->
-  <div class="absolute bottom-6 left-6 z-30 md:hidden pointer-events-auto flex flex-col items-center">
-    <!-- D-Pad Buttons -->
-    <div class="grid grid-cols-3 gap-2 w-36 h-36">
+  <!-- 手機虛擬搖桿方向鍵 -->
+  <div id="mobile-controls" class="fixed bottom-5 left-5 z-20 md:hidden pointer-events-auto">
+    <div class="grid grid-cols-3 gap-1.5 w-36 h-36">
       <div></div>
-      <button id="btn-up" class="dpad-btn bg-white/80 active:bg-cyan-500 active:text-white rounded-2xl flex items-center justify-center text-slate-800 text-xl font-black shadow-lg backdrop-blur">
-        <i class="fa-solid fa-chevron-up"></i>
-      </button>
+      <button id="btn-up" class="bg-white/85 active:bg-amber-400 active:text-white rounded-2xl shadow text-slate-800 text-xl font-black flex items-center justify-center">▲</button>
       <div></div>
-      <button id="btn-left" class="dpad-btn bg-white/80 active:bg-cyan-500 active:text-white rounded-2xl flex items-center justify-center text-slate-800 text-xl font-black shadow-lg backdrop-blur">
-        <i class="fa-solid fa-chevron-left"></i>
-      </button>
-      <div class="flex items-center justify-center text-slate-400 text-xs font-bold">🕹️</div>
-      <button id="btn-right" class="dpad-btn bg-white/80 active:bg-cyan-500 active:text-white rounded-2xl flex items-center justify-center text-slate-800 text-xl font-black shadow-lg backdrop-blur">
-        <i class="fa-solid fa-chevron-right"></i>
-      </button>
+      <button id="btn-left" class="bg-white/85 active:bg-amber-400 active:text-white rounded-2xl shadow text-slate-800 text-xl font-black flex items-center justify-center">◀</button>
+      <div class="flex items-center justify-center text-slate-400 text-xs font-black">🧭</div>
+      <button id="btn-right" class="bg-white/85 active:bg-amber-400 active:text-white rounded-2xl shadow text-slate-800 text-xl font-black flex items-center justify-center">▶</button>
       <div></div>
-      <button id="btn-down" class="dpad-btn bg-white/80 active:bg-cyan-500 active:text-white rounded-2xl flex items-center justify-center text-slate-800 text-xl font-black shadow-lg backdrop-blur">
-        <i class="fa-solid fa-chevron-down"></i>
-      </button>
+      <button id="btn-down" class="bg-white/85 active:bg-amber-400 active:text-white rounded-2xl shadow text-slate-800 text-xl font-black flex items-center justify-center">▼</button>
       <div></div>
     </div>
   </div>
 
-  <!-- Mobile Jump & Interact Button -->
-  <div class="absolute bottom-8 right-6 z-30 md:hidden pointer-events-auto flex items-center space-x-3">
-    <button id="btn-jump-touch" class="w-16 h-16 rounded-3xl bg-gradient-to-tr from-cyan-500 to-teal-400 text-white font-extrabold text-xl shadow-xl active:scale-90 transition flex flex-col items-center justify-center">
+  <!-- 手機跳躍按鈕 -->
+  <div class="fixed bottom-6 right-6 z-20 md:hidden pointer-events-auto">
+    <button id="btn-jump" class="w-16 h-16 rounded-3xl bg-gradient-to-tr from-amber-400 to-orange-500 text-white font-black text-sm shadow-xl active:scale-90 border-2 border-white flex flex-col items-center justify-center">
       <i class="fa-solid fa-arrow-up text-base"></i>
       <span class="text-[10px]">跳躍</span>
     </button>
   </div>
 
-  <!-- ==================== MODALS ==================== -->
+  <!-- ==================== 彈窗系統 ==================== -->
 
-  <!-- Modal 1: Welcome & Start Adventure Screen -->
-  <div id="start-modal" class="absolute inset-0 z-50 bg-slate-900/60 backdrop-blur-md flex items-center justify-center p-4">
-    <div class="glass-panel w-full max-w-md rounded-3xl p-7 text-center border-4 border-amber-300 shadow-2xl">
-      <div class="w-20 h-20 mx-auto -mt-16 rounded-3xl bg-gradient-to-tr from-amber-400 to-yellow-300 border-4 border-white flex items-center justify-center text-4xl shadow-xl floating-beacon">
-        🏝️
+  <!-- 1. 開局自訂視窗 (選擇男女角色與輸入姓名) -->
+  <div id="start-modal" class="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
+    <div class="glass-panel w-full max-w-md p-6 sm:p-7 rounded-3xl shadow-2xl text-center border-amber-300">
+      <div class="w-16 h-16 mx-auto -mt-14 rounded-2xl bg-gradient-to-tr from-amber-400 to-yellow-300 border-4 border-white flex items-center justify-center text-3xl shadow-xl">
+        🏛️
       </div>
-      <h1 class="text-2xl font-black text-slate-800 mt-4 mb-1">戶政 3D 平面冒險島</h1>
-      <p class="text-xs sm:text-sm text-cyan-800 font-bold mb-4">操控探險家在 3D 浮島上自由漫遊，解鎖三大戶政關卡！</p>
+      <h1 class="text-xl sm:text-2xl font-black text-slate-800 mt-2 mb-1">梓官戶政・3D 冒險島</h1>
+      <p class="text-xs text-slate-500 font-bold mb-4">客製您的手辦角色形象，挑戰 6 大戶政考驗並集滿 1000 金幣！</p>
       
-      <div class="bg-amber-50/90 rounded-2xl p-4 text-left text-xs sm:text-sm text-slate-700 space-y-2 mb-6 border border-amber-200">
-        <div class="flex items-start space-x-2">
-          <span class="text-amber-600 font-bold">1.</span>
-          <span><strong>自由探索與踩怪</strong>：全島漫遊，跳躍起跳踩踏小怪物頭頂可踩扁怪獸並賺取金幣！</span>
-        </div>
-        <div class="flex items-start space-x-2">
-          <span class="text-amber-600 font-bold">2.</span>
-          <span><strong>跟隨金色光柱</strong>：走進彩色發光圈解鎖考驗，完成全島 6 大生活戶政神壇！</span>
-        </div>
-        <div class="flex items-start space-x-2">
-          <span class="text-amber-600 font-bold">3.</span>
-          <span><strong>戶政大百科</strong>：從結婚、印鑑、遷徙到新生兒申辦與首次辦護照全精通。</span>
+      <!-- 輸入姓名 -->
+      <div class="text-left mb-3">
+        <label class="block text-xs font-black text-slate-700 mb-1">
+          <i class="fa-solid fa-signature text-amber-500 mr-1"></i> 請輸入冒險員姓名 / 暱稱：
+        </label>
+        <input type="text" id="player-name-input" value="梓官小探險家" maxlength="10" class="w-full px-4 py-2.5 text-sm rounded-xl border-2 border-amber-200 focus:outline-none focus:border-amber-500 font-extrabold text-slate-800 bg-white shadow-inner" placeholder="請輸入姓名">
+      </div>
+
+      <!-- 角色外觀選擇 -->
+      <div class="text-left mb-5">
+        <label class="block text-xs font-black text-slate-700 mb-2">
+          <i class="fa-solid fa-user text-sky-500 mr-1"></i> 選擇志工隊員角色外觀：
+        </label>
+        <div class="grid grid-cols-2 gap-3">
+          <!-- 女角 -->
+          <button id="btn-pick-female" type="button" class="relative p-3 rounded-2xl border-4 border-pink-400 bg-pink-50 text-center transition-all hover:scale-102 shadow-sm">
+            <div class="text-3xl mb-1">👧</div>
+            <div class="font-black text-sm text-pink-700">小梓 (女角)</div>
+            <div class="text-[10px] text-pink-900 font-bold">粉紅短髮・黃背心・藍短裙</div>
+            <div id="check-female" class="absolute top-2 right-2 w-5 h-5 rounded-full bg-pink-500 text-white text-[10px] flex items-center justify-center font-bold">✓</div>
+          </button>
+          <!-- 男角 -->
+          <button id="btn-pick-male" type="button" class="relative p-3 rounded-2xl border-2 border-slate-200 bg-white text-center transition-all hover:scale-102 shadow-sm">
+            <div class="text-3xl mb-1">👦</div>
+            <div class="font-black text-sm text-slate-700">小官 (男角)</div>
+            <div class="text-[10px] text-slate-500 font-bold">棕橘層次短髮・黃背心工裝褲</div>
+            <div id="check-male" class="hidden absolute top-2 right-2 w-5 h-5 rounded-full bg-sky-500 text-white text-[10px] flex items-center justify-center font-bold">✓</div>
+          </button>
         </div>
       </div>
 
-      <button id="btn-start-game" class="w-full py-4 bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 text-white font-black text-base rounded-2xl shadow-xl active:scale-95 transition-all">
-        <i class="fa-solid fa-compass mr-2"></i> 出發！踏上冒險島
+      <!-- 規則提示 -->
+      <div class="bg-amber-50/90 rounded-2xl p-3 text-left text-xs text-slate-700 space-y-1 mb-5 border border-amber-200 font-bold">
+        <p>🎯 <strong>完賽條件（需達 1200 分）</strong>：</p>
+        <p class="text-amber-800">1. 完成 6 大戶政考驗共可獲得 <strong>1000 分</strong>。</p>
+        <p class="text-purple-800">2. 島上有 4 大戶政偽冒怪，至少需踩扁 <strong>4 隻怪 (+200 分)</strong>！</p>
+        <p class="text-emerald-700">3. 湊滿 <strong>1200 分</strong> 後前往中央按鈕投幣完賽！</p>
+      </div>
+
+      <button id="btn-start-game" class="w-full py-3.5 bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 text-white font-black text-base rounded-2xl shadow-xl btn-bounce transition">
+        <i class="fa-solid fa-play mr-2"></i> 出發探險！
       </button>
     </div>
   </div>
 
-  <!-- Modal 2: Question Checkpoint Modal (Triggered ONLY at Checkpoint) -->
-  <div id="quiz-modal" class="hidden absolute inset-0 z-50 bg-black/45 backdrop-blur-sm flex items-center justify-center p-4">
-    <div class="glass-panel w-full max-w-lg rounded-3xl p-6 sm:p-8 text-center relative border-4 border-amber-300 shadow-2xl">
-      <div id="modal-checkpoint-icon" class="w-16 h-16 mx-auto -mt-14 rounded-2xl bg-gradient-to-tr from-amber-400 to-yellow-300 border-4 border-white flex items-center justify-center text-3xl shadow-lg floating-beacon">
-        💍
+  <!-- 2. 題目問答視窗 -->
+  <div id="quiz-modal" class="fixed inset-0 z-40 hidden flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
+    <div class="glass-panel w-full max-w-md p-6 sm:p-7 rounded-3xl shadow-2xl text-center border-amber-300 relative">
+      <div id="quiz-badge" class="inline-block bg-amber-100 text-amber-800 text-xs font-black px-3 py-1 rounded-full mb-2">關卡考驗</div>
+      <h3 id="quiz-title" class="text-base sm:text-lg font-black text-slate-800 mb-2 leading-snug">問題標題</h3>
+      <p id="quiz-desc" class="text-slate-500 text-xs mb-4">答對可獲得 150 枚金幣！</p>
+      
+      <div id="quiz-options" class="grid grid-cols-1 gap-2.5 mb-3"></div>
+      <div id="quiz-feedback" class="text-xs sm:text-sm font-bold min-h-[1.5rem]"></div>
+    </div>
+  </div>
+
+  <!-- 3. 中央金庫投幣彈窗 (專屬投幣確認畫面) -->
+  <div id="vault-modal" class="fixed inset-0 z-40 hidden flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
+    <div class="glass-panel w-full max-w-md p-6 sm:p-7 rounded-3xl shadow-2xl text-center border-amber-400 relative">
+      <div class="w-16 h-16 mx-auto -mt-12 rounded-2xl bg-gradient-to-tr from-amber-400 to-yellow-300 border-4 border-white flex items-center justify-center text-3xl shadow-xl">
+        🪙
+      </div>
+      <h3 class="text-xl font-black text-slate-800 mt-2 mb-1">中央榮譽金庫</h3>
+      <p class="text-xs text-slate-500 font-bold mb-4">投入 1,200 榮譽金幣以領取梓官戶政達人證書！</p>
+
+      <div class="bg-amber-50 rounded-2xl p-4 border border-amber-200 text-left mb-4 space-y-2">
+        <div class="flex justify-between items-center text-xs font-bold text-slate-700">
+          <span>目前累積金幣：</span>
+          <span id="vault-check-coins" class="text-base font-black text-amber-600">0 / 1200</span>
+        </div>
+        <div class="flex justify-between items-center text-xs font-bold text-slate-700">
+          <span>擊敗偽冒魔物：</span>
+          <span id="vault-check-monsters" class="text-base font-black text-purple-600">0 / 4 隻</span>
+        </div>
+        <div id="vault-status-msg" class="text-xs font-extrabold text-rose-500 pt-1 border-t border-amber-200">
+          尚未達成投幣條件！
+        </div>
       </div>
 
-      <div class="mt-3 mb-2 flex justify-center">
-        <span id="modal-checkpoint-badge" class="px-3 py-1 bg-amber-100 text-amber-800 text-xs font-black rounded-full uppercase tracking-wider">
-          關卡考驗 01
-        </span>
+      <div class="flex gap-2">
+        <button id="btn-close-vault" class="flex-1 py-3 bg-slate-200 hover:bg-slate-300 text-slate-700 font-bold rounded-xl text-sm transition">
+          稍後再來
+        </button>
+        <button id="btn-do-deposit" class="flex-1 py-3 bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 text-white font-black rounded-xl text-sm transition shadow-lg opacity-50 cursor-not-allowed">
+          立即投幣完賽
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 4. 結算證書 (民眾拍照截圖依據) -->
+  <div id="cert-modal" class="fixed inset-0 z-50 hidden flex items-center justify-center bg-slate-900/80 backdrop-blur-md p-4 overflow-y-auto">
+    <div class="glass-panel w-full max-w-sm sm:max-w-md p-6 sm:p-7 rounded-3xl shadow-2xl text-center border-4 border-amber-400 relative">
+      
+      <!-- 頂端榮譽彩帶 -->
+      <div class="w-full bg-gradient-to-r from-rose-600 via-amber-500 to-rose-600 text-white font-black py-2 px-4 rounded-xl shadow-md mb-2 flex items-center justify-center gap-2">
+        <span>🎖️</span>
+        <span class="text-base sm:text-lg tracking-wider">戶政達人榮譽證書</span>
+        <span>🎖️</span>
       </div>
 
-      <h2 id="modal-question" class="text-lg sm:text-xl font-extrabold text-slate-800 mt-1 mb-2 leading-snug">
-        問題標題
-      </h2>
-      <p id="modal-question-desc" class="text-slate-500 text-xs sm:text-sm mb-5">
-        請點選正確的解答以獲取島嶼祝福與金幣！
+      <div class="text-[10px] font-black text-amber-800 tracking-wider uppercase mb-2">KAOHSIUNG ZIGUAN HOUSEHOLD REGISTRATION OFFICE</div>
+
+      <div class="my-3 py-2 px-4 bg-amber-100/90 rounded-2xl border-2 border-amber-300">
+        <div class="text-xs text-slate-600 font-bold">恭喜！戶政大冒險家</div>
+        <h2 id="cert-player-name" class="text-2xl sm:text-3xl font-black text-rose-600 tracking-wide mt-0.5">
+          梓官小探險家
+        </h2>
+      </div>
+
+      <p class="text-slate-700 text-xs sm:text-sm mb-4 leading-relaxed font-bold">
+        圓滿挑戰完成梓官戶政島六大核心考驗，成功掃除四大違法偽冒魔物，並於中央金庫順利投納 1,200 枚榮譽金幣，特頒此證！
       </p>
 
-      <div id="quiz-options-grid" class="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-4">
-        <!-- Injected via JS -->
-      </div>
-
-      <div id="quiz-feedback" class="min-h-[26px] text-xs sm:text-sm font-bold text-slate-600"></div>
-    </div>
-  </div>
-
-  <!-- Modal 3: Final Victory Screen -->
-  <div id="victory-modal" class="hidden absolute inset-0 z-50 bg-slate-900/60 backdrop-blur-md flex items-center justify-center p-4">
-    <div class="glass-panel w-full max-w-md rounded-3xl p-7 text-center border-4 border-yellow-400 shadow-2xl pulse-glow">
-      <div class="text-6xl mb-2">🏆</div>
-      <span class="px-3 py-1 bg-yellow-200 text-yellow-900 text-xs font-black rounded-full tracking-wide">通關榮耀</span>
-      <h2 class="text-2xl font-black text-slate-800 mt-2 mb-2">戶政知識冒險王！</h2>
-      <p class="text-slate-600 text-xs sm:text-sm mb-5">太厲害了！你已親身踏遍全島六大戶政地標並踩倒島上小魔物，徹底掌握所有核心戶政生活常識！</p>
-      
-      <div class="bg-amber-50/90 rounded-2xl p-4 mb-5 border border-amber-200 text-left space-y-2 text-xs sm:text-sm text-slate-700 max-h-48 overflow-y-auto">
-        <div class="flex items-center justify-between">
-          <span>💖 結婚登記證人：</span>
-          <span class="font-bold text-amber-800">2位法定成年人</span>
+      <!-- 統計數據 -->
+      <div class="grid grid-cols-3 gap-2 bg-white/95 rounded-2xl p-3 border border-amber-200 mb-4 text-center">
+        <div>
+          <div class="text-[10px] text-slate-500 font-bold">最終積分</div>
+          <div id="cert-score" class="text-base sm:text-lg font-black text-amber-600 font-mono">1200</div>
         </div>
-        <div class="flex items-center justify-between">
-          <span>📑 印鑑證明申辦：</span>
-          <span class="font-bold text-amber-800">戶籍地戶政所</span>
+        <div>
+          <div class="text-[10px] text-slate-500 font-bold">踩扁魔物</div>
+          <div id="cert-monsters" class="text-base sm:text-lg font-black text-rose-500 font-mono">4 隻</div>
         </div>
-        <div class="flex items-center justify-between">
-          <span>🏠 遷徙戶籍辦理：</span>
-          <span class="font-bold text-amber-800">直接至遷入地戶政</span>
-        </div>
-        <div class="flex items-center justify-between">
-          <span>🍼 出生登記期限：</span>
-          <span class="font-bold text-amber-800">出生日起 60 日內</span>
-        </div>
-        <div class="flex items-center justify-between">
-          <span>⚖️ 死亡後用其證章：</span>
-          <span class="font-bold text-rose-700">絕對不行 (觸法)</span>
-        </div>
-        <div class="flex items-center justify-between">
-          <span>🛂 首次辦護照核對：</span>
-          <span class="font-bold text-amber-800">申請人本人親自到場</span>
+        <div>
+          <div class="text-[10px] text-slate-500 font-bold">關卡完成</div>
+          <div id="cert-quests" class="text-base sm:text-lg font-black text-emerald-600 font-mono">6 / 6</div>
         </div>
       </div>
 
-      <div class="flex space-x-3">
-        <button id="btn-roam-free" class="flex-1 py-3 bg-slate-800 hover:bg-slate-700 text-white font-bold rounded-xl text-sm transition">
-          繼續在島上自由散步
+      <!-- 梓官戶政檢定圓章 -->
+      <div class="flex justify-between items-center px-2 mb-4">
+        <div class="text-left text-[11px] text-slate-500 font-bold">
+          <div>核發機關：高雄市梓官戶政事務所</div>
+          <div id="cert-date">認證日期：2026 年 11 月 03 日</div>
+        </div>
+        <div class="stamp-seal px-3 py-1.5 rounded-lg text-xs font-black">
+          梓官戶政<br>檢定特優章
+        </div>
+      </div>
+
+      <div class="bg-rose-50 text-rose-700 border border-rose-200 rounded-xl py-2 px-3 text-xs font-black mb-4">
+        📸 請立即「手機螢幕截圖」保存本畫面，作為戶政宣導活動憑證！
+      </div>
+
+      <div class="flex gap-2">
+        <button id="btn-roam-free" class="flex-1 py-2.5 bg-slate-800 hover:bg-slate-700 text-white font-bold rounded-xl text-xs transition">
+          島上自由漫遊
         </button>
-        <button id="btn-restart" class="flex-1 py-3 bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 text-white font-extrabold rounded-xl text-sm transition shadow-md">
-          重新開始冒險
+        <button onclick="location.reload()" class="flex-1 py-2.5 bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 text-white font-extrabold rounded-xl text-xs transition shadow">
+          再次遊玩挑戰
         </button>
       </div>
     </div>
   </div>
 
-  <!-- Modal 4: Instructions Modal -->
-  <div id="help-modal" class="hidden absolute inset-0 z-50 bg-black/40 backdrop-blur-sm flex items-center justify-center p-4">
-    <div class="glass-panel w-full max-w-sm rounded-3xl p-6 text-center border-2 border-white shadow-2xl">
-      <div class="text-4xl mb-2">🧭</div>
-      <h3 class="text-lg font-black text-slate-800 mb-2">如何探索平面冒險島？</h3>
-      <div class="text-left text-xs text-slate-600 space-y-2 mb-5">
-        <p>• <strong>自由移動</strong>：使用鍵盤 <kbd class="px-1 bg-slate-200 rounded">W</kbd><kbd class="px-1 bg-slate-200 rounded">A</kbd><kbd class="px-1 bg-slate-200 rounded">S</kbd><kbd class="px-1 bg-slate-200 rounded">D</kbd> 或方向鍵控制角色前後左右奔跑。</p>
-        <p>• <strong>跳躍</strong>：按下 <kbd class="px-1.5 bg-slate-200 rounded">空白鍵</kbd> 跳過障礙或跨過河流小石。</p>
-        <p>• <strong>跟隨光柱</strong>：地面上有巨大的彩色發光圈，走進發光圈就會跳出互動挑戰按鈕！</p>
-        <p>• <strong>答對領獎</strong>：答對題目會釋放慶祝煙火、發放金幣並開啟下一個關卡的光柱引導！</p>
-      </div>
-      <button id="btn-close-help" class="w-full py-2.5 bg-slate-800 text-white font-bold rounded-xl text-xs active:scale-95 transition">關閉指南</button>
-    </div>
-  </div>
-
-  <!-- ==================== THREE.JS GAME SCRIPT ==================== -->
+  <!-- ==================== THREE.JS 遊戲核心代碼 ==================== -->
   <script>
-    /* ==========================================================
-       1. SYNTHETIC AUDIO ENGINE (Web Audio API)
-       ========================================================== */
-    class SoundFX {
+    /* ---------------- 題庫與各關卡配置 (總分 1000) ---------------- */
+    const QUESTS = [
+      { id: 1, name: "良緣登記殿", q: "辦理「結婚登記」法定需要幾位成年證人簽名或蓋章？", desc: "結婚書約上的法定成年證人人數規定是幾位？", options: ["1 位", "2 位", "3 位", "不需要證人"], ans: 1, reward: 160, pos: { x: -28, z: -25 } },
+      { id: 2, name: "印鑑證明閣", q: "首次申辦「印鑑登記與印鑑證明」原則上需至何處辦理？", desc: "不動產移轉所需的印鑑證明，管轄所為何處？", options: ["任一超商", "戶籍所在地戶政事務所", "任意郵局", "外交部領務局"], ans: 1, reward: 160, pos: { x: 28, z: -25 } },
+      { id: 3, name: "安居遷徙門", q: "民眾要辦理「遷戶口 (遷入登記)」，應攜帶證件至哪裡辦理？", desc: "全台戶政連線，遷徙登記應前往何所辦理？", options: ["遷出地戶政事務所", "遷入地戶政事務所 (單方一次辦好)", "警察局派出所", "隨便哪間公所"], ans: 1, reward: 160, pos: { x: 30, z: 25 } },
+      { id: 4, name: "新生萌芽殿", q: "新生兒「出生登記」依戶籍法規定，應於出生後幾日內辦理？", desc: "迎接新生命，法定的辦理期限是幾天？", options: ["30 日內", "60 日內", "90 日內", "1 年內"], ans: 1, reward: 160, pos: { x: -30, z: 25 } },
+      { id: 5, name: "誠信安息壇", q: "親人不幸死亡但尚未辦理死亡登記，可以拿其身分證印章代辦事情嗎？", desc: "人死亡後權利能力消滅，私自使用其證章是否合法？", options: ["可以，家屬代管很合理", "絕對不行！涉及偽造文書與冒用罪", "金額小於1萬就可以", "無所謂"], ans: 1, reward: 180, pos: { x: 0, z: -40 } },
+      { id: 6, name: "世界之窗閣", q: "首次申辦護照若至戶政事務所辦理「人別確認」，必須核對誰的人貌？", desc: "首次申辦護照人別確認之法定親自露臉原則：", options: ["爸爸的人貌", "里長的人貌", "申請人本人", "隔壁老王"], ans: 2, reward: 180, pos: { x: 0, z: 42 } }
+    ];
+
+    /* ---------------- 全域狀態 ---------------- */
+    let playerName = "梓官小探險家";
+    let selectedGender = "female";
+    let coins = 0;
+    let clearedCount = 0;
+    let stompCount = 0;
+    let isModalOpen = true;
+    let currentNearbyType = null;
+    let currentNearbyQuest = null;
+    let isInsertingCoins = false; // 是否正在撥放投幣動畫
+
+    /* ---------------- 聲音合成 (Web Audio API) ---------------- */
+    class SoundEngine {
       constructor() {
         this.ctx = null;
         this.enabled = true;
@@ -312,1247 +321,1001 @@
           this.ctx.resume();
         }
       }
-      playStep() {
-        if (!this.enabled || !this.ctx) return;
-        try {
-          const osc = this.ctx.createOscillator();
-          const gain = this.ctx.createGain();
-          osc.type = 'triangle';
-          osc.frequency.setValueAtTime(160, this.ctx.currentTime);
-          osc.frequency.exponentialRampToValueAtTime(60, this.ctx.currentTime + 0.08);
-          gain.gain.setValueAtTime(0.04, this.ctx.currentTime);
-          gain.gain.linearRampToValueAtTime(0.001, this.ctx.currentTime + 0.08);
-          osc.connect(gain);
-          gain.connect(this.ctx.destination);
-          osc.start();
-          osc.stop(this.ctx.currentTime + 0.08);
-        } catch(e){}
-      }
       playJump() {
         if (!this.enabled || !this.ctx) return;
-        try {
-          const osc = this.ctx.createOscillator();
-          const gain = this.ctx.createGain();
-          osc.type = 'sine';
-          osc.frequency.setValueAtTime(220, this.ctx.currentTime);
-          osc.frequency.exponentialRampToValueAtTime(480, this.ctx.currentTime + 0.2);
-          gain.gain.setValueAtTime(0.08, this.ctx.currentTime);
-          gain.gain.linearRampToValueAtTime(0.001, this.ctx.currentTime + 0.2);
-          osc.connect(gain);
-          gain.connect(this.ctx.destination);
-          osc.start();
-          osc.stop(this.ctx.currentTime + 0.2);
-        } catch(e){}
+        const osc = this.ctx.createOscillator();
+        const g = this.ctx.createGain();
+        osc.type = 'triangle';
+        osc.frequency.setValueAtTime(260, this.ctx.currentTime);
+        osc.frequency.exponentialRampToValueAtTime(540, this.ctx.currentTime + 0.16);
+        g.gain.setValueAtTime(0.12, this.ctx.currentTime);
+        g.gain.linearRampToValueAtTime(0.001, this.ctx.currentTime + 0.16);
+        osc.connect(g);
+        g.connect(this.ctx.destination);
+        osc.start();
+        osc.stop(this.ctx.currentTime + 0.16);
       }
       playStomp() {
         if (!this.enabled || !this.ctx) return;
-        try {
-          // Play classic Mario-like squish pop sound
-          const osc = this.ctx.createOscillator();
-          const gain = this.ctx.createGain();
-          osc.type = 'triangle';
-          osc.frequency.setValueAtTime(450, this.ctx.currentTime);
-          osc.frequency.exponentialRampToValueAtTime(80, this.ctx.currentTime + 0.18);
-          gain.gain.setValueAtTime(0.2, this.ctx.currentTime);
-          gain.gain.linearRampToValueAtTime(0.001, this.ctx.currentTime + 0.18);
-          osc.connect(gain);
-          gain.connect(this.ctx.destination);
-          osc.start();
-          osc.stop(this.ctx.currentTime + 0.18);
-        } catch(e){}
+        const osc = this.ctx.createOscillator();
+        const g = this.ctx.createGain();
+        osc.type = 'square';
+        osc.frequency.setValueAtTime(450, this.ctx.currentTime);
+        osc.frequency.exponentialRampToValueAtTime(80, this.ctx.currentTime + 0.2);
+        g.gain.setValueAtTime(0.2, this.ctx.currentTime);
+        g.gain.linearRampToValueAtTime(0.001, this.ctx.currentTime + 0.2);
+        osc.connect(g);
+        g.connect(this.ctx.destination);
+        osc.start();
+        osc.stop(this.ctx.currentTime + 0.2);
       }
-      playBump() {
+      playCoinClink() {
         if (!this.enabled || !this.ctx) return;
-        try {
-          const osc = this.ctx.createOscillator();
-          const gain = this.ctx.createGain();
-          osc.type = 'square';
-          osc.frequency.setValueAtTime(140, this.ctx.currentTime);
-          gain.gain.setValueAtTime(0.09, this.ctx.currentTime);
-          gain.gain.linearRampToValueAtTime(0.001, this.ctx.currentTime + 0.12);
-          osc.connect(gain);
-          gain.connect(this.ctx.destination);
-          osc.start();
-          osc.stop(this.ctx.currentTime + 0.12);
-        } catch(e){}
-      }
-      playProximityBeep() {
-        if (!this.enabled || !this.ctx) return;
-        try {
-          const osc = this.ctx.createOscillator();
-          const gain = this.ctx.createGain();
-          osc.type = 'sine';
-          osc.frequency.setValueAtTime(587.33, this.ctx.currentTime);
-          gain.gain.setValueAtTime(0.08, this.ctx.currentTime);
-          gain.gain.exponentialRampToValueAtTime(0.001, this.ctx.currentTime + 0.25);
-          osc.connect(gain);
-          gain.connect(this.ctx.destination);
-          osc.start();
-          osc.stop(this.ctx.currentTime + 0.25);
-        } catch(e){}
+        const osc = this.ctx.createOscillator();
+        const g = this.ctx.createGain();
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(987.77, this.ctx.currentTime);
+        osc.frequency.setValueAtTime(1318.51, this.ctx.currentTime + 0.05);
+        g.gain.setValueAtTime(0.15, this.ctx.currentTime);
+        g.gain.exponentialRampToValueAtTime(0.001, this.ctx.currentTime + 0.25);
+        osc.connect(g);
+        g.connect(this.ctx.destination);
+        osc.start();
+        osc.stop(this.ctx.currentTime + 0.25);
       }
       playCorrect() {
         if (!this.enabled || !this.ctx) return;
-        try {
-          const notes = [523.25, 659.25, 783.99, 1046.50];
-          notes.forEach((f, i) => {
-            const osc = this.ctx.createOscillator();
-            const gain = this.ctx.createGain();
-            osc.type = 'triangle';
-            osc.frequency.setValueAtTime(f, this.ctx.currentTime + i * 0.08);
-            gain.gain.setValueAtTime(0.12, this.ctx.currentTime + i * 0.08);
-            gain.gain.exponentialRampToValueAtTime(0.001, this.ctx.currentTime + i * 0.08 + 0.35);
-            osc.connect(gain);
-            gain.connect(this.ctx.destination);
-            osc.start(this.ctx.currentTime + i * 0.08);
-            osc.stop(this.ctx.currentTime + i * 0.08 + 0.35);
-          });
-        } catch(e){}
+        [523.25, 659.25, 783.99, 1046.50].forEach((f, i) => {
+          const osc = this.ctx.createOscillator();
+          const g = this.ctx.createGain();
+          osc.type = 'triangle';
+          osc.frequency.setValueAtTime(f, this.ctx.currentTime + i * 0.08);
+          g.gain.setValueAtTime(0.14, this.ctx.currentTime + i * 0.08);
+          g.gain.exponentialRampToValueAtTime(0.001, this.ctx.currentTime + i * 0.08 + 0.35);
+          osc.connect(g);
+          g.connect(this.ctx.destination);
+          osc.start(this.ctx.currentTime + i * 0.08);
+          osc.stop(this.ctx.currentTime + i * 0.08 + 0.35);
+        });
       }
       playWrong() {
         if (!this.enabled || !this.ctx) return;
-        try {
-          const osc = this.ctx.createOscillator();
-          const gain = this.ctx.createGain();
-          osc.type = 'sawtooth';
-          osc.frequency.setValueAtTime(240, this.ctx.currentTime);
-          osc.frequency.linearRampToValueAtTime(130, this.ctx.currentTime + 0.25);
-          gain.gain.setValueAtTime(0.12, this.ctx.currentTime);
-          gain.gain.linearRampToValueAtTime(0.001, this.ctx.currentTime + 0.25);
-          osc.connect(gain);
-          gain.connect(this.ctx.destination);
-          osc.start();
-          osc.stop(this.ctx.currentTime + 0.25);
-        } catch(e){}
+        const osc = this.ctx.createOscillator();
+        const g = this.ctx.createGain();
+        osc.type = 'sawtooth';
+        osc.frequency.setValueAtTime(220, this.ctx.currentTime);
+        osc.frequency.linearRampToValueAtTime(120, this.ctx.currentTime + 0.3);
+        g.gain.setValueAtTime(0.14, this.ctx.currentTime);
+        g.gain.linearRampToValueAtTime(0.001, this.ctx.currentTime + 0.3);
+        osc.connect(g);
+        g.connect(this.ctx.destination);
+        osc.start();
+        osc.stop(this.ctx.currentTime + 0.3);
       }
-      playVictory() {
+      playFanfare() {
         if (!this.enabled || !this.ctx) return;
-        try {
-          [440, 554, 659, 880, 1108].forEach((f, i) => {
-            const osc = this.ctx.createOscillator();
-            const gain = this.ctx.createGain();
-            osc.type = 'sine';
-            osc.frequency.setValueAtTime(f, this.ctx.currentTime + i * 0.12);
-            gain.gain.setValueAtTime(0.14, this.ctx.currentTime + i * 0.12);
-            gain.gain.exponentialRampToValueAtTime(0.001, this.ctx.currentTime + i * 0.12 + 0.45);
-            osc.connect(gain);
-            gain.connect(this.ctx.destination);
-            osc.start(this.ctx.currentTime + i * 0.12);
-            osc.stop(this.ctx.currentTime + i * 0.12 + 0.45);
-          });
-        } catch(e){}
+        [392, 523, 659, 783, 1046].forEach((f, i) => {
+          const osc = this.ctx.createOscillator();
+          const g = this.ctx.createGain();
+          osc.type = 'sine';
+          osc.frequency.setValueAtTime(f, this.ctx.currentTime + i * 0.12);
+          g.gain.setValueAtTime(0.18, this.ctx.currentTime + i * 0.12);
+          g.gain.exponentialRampToValueAtTime(0.001, this.ctx.currentTime + i * 0.12 + 0.5);
+          osc.connect(g);
+          g.connect(this.ctx.destination);
+          osc.start(this.ctx.currentTime + i * 0.12);
+          osc.stop(this.ctx.currentTime + i * 0.12 + 0.5);
+        });
       }
     }
-    const sound = new SoundFX();
+    const sound = new SoundEngine();
 
-    /* ==========================================================
-       2. CHECKPOINTS & QUESTION DATA
-       ========================================================== */
-    const CHECKPOINTS = [
-      {
-        id: 1,
-        title: "前往【良緣神殿】",
-        badge: "戶政第一關",
-        icon: "💍",
-        pos: new THREE.Vector3(0, 0, -20),
-        color: 0xff4757,
-        question: "辦理「結婚登記」，需要幾位成年證人簽名或蓋章？",
-        desc: "新人前往戶政事務所登記時，結婚書約上應具備幾位法定證人？",
-        options: [
-          { text: "1 位", correct: false, note: "人數不夠喔！法律有明確數量規範。" },
-          { text: "2 位", correct: true, note: "完全正確！依民法規定，須有 2 位年滿 18 歲成年證人簽名或蓋章！" },
-          { text: "3 位", correct: false, note: "只要 2 位就可以具備法定效力囉！" },
-          { text: "不需要證人", correct: false, note: "結婚是重大身分契約，一定需要法定證人喔！" }
-        ]
-      },
-      {
-        id: 2,
-        title: "前往【印鑑證明古殿】",
-        badge: "戶政第二關",
-        icon: "📑",
-        pos: new THREE.Vector3(26, 0, -6),
-        color: 0xffa502,
-        question: "申辦「印鑑證明」，原則上必須前往何處辦理？",
-        desc: "因不動產移轉或重大合約需要印鑑證明時，應該到哪個機關申辦？",
-        options: [
-          { text: "戶籍所在地戶政事務所", correct: true, note: "精準無誤！涉及印鑑章原始底冊與條碼比對，依法專屬於「戶籍地」戶政辦理！" },
-          { text: "全國任一戶政事務所", correct: false, note: "多數戶籍項目雖可異地申辦，但印鑑證明原則上必須親至戶籍地戶政事務所！" },
-          { text: "附近郵局或區公所", correct: false, note: "郵局與公所社會課並無核發印鑑證明的業務權限喔。" },
-          { text: "警察局派出所", correct: false, note: "警察局負責治安交通，非戶籍證照登記機關。" }
-        ]
-      },
-      {
-        id: 3,
-        title: "前往【安居遷徙之門】",
-        badge: "戶政第三關",
-        icon: "🏠",
-        pos: new THREE.Vector3(-24, 0, -18),
-        color: 0x2ed573,
-        question: "辦理遷戶口（遷入登記），現在應該前往哪裡申辦？",
-        desc: "搬了新家換新居，為了簡政便民，民眾應該親自跑哪一個戶政所？",
-        options: [
-          { text: "遷入地戶政事務所（直接辦好）", correct: true, note: "太棒了！直接帶齊證件到「新住址遷入地」戶政即可一站完成，不用先去遷出地！" },
-          { text: "遷出地戶政事務所", correct: false, note: "若跑去原舊居戶政，是無法單獨受理遷出登記的喔！" },
-          { text: "遷出地與遷入地都必須各跑一次", correct: false, note: "戶政便民網絡完全連線，只要跑「遷入地」一趟即可搞定！" },
-          { text: "內政部總署", correct: false, note: "基層業務由各戶政事務所第一線即時受理。" }
-        ]
-      },
-      {
-        id: 4,
-        title: "前往【新生萌芽殿堂】",
-        badge: "戶政第四關",
-        icon: "🍼",
-        pos: new THREE.Vector3(22, 0, 18),
-        color: 0x1dd1a1,
-        question: "新生兒出生後，依法應在幾日內辦理出生登記？",
-        desc: "迎接新生命到來，戶籍法規定的法定申報期限是幾天內呢？",
-        options: [
-          { text: "30 日內", correct: false, note: "30日時間太短囉，法規考量坐月子給予更充足期限！" },
-          { text: "60 日內", correct: true, note: "正確！依戶籍法規定，出生登記應在出生後 60 日內向戶政事務所申辦喔！" },
-          { text: "90 日內", correct: false, note: "超過 60 日會逾期而被通知催告甚至裁罰喔！" },
-          { text: "滿一歲前皆可", correct: false, note: "太久了！為了保障幼兒健保與就醫權利，法定是 60 日內！" }
-        ]
-      },
-      {
-        id: 5,
-        title: "前往【誠信安息祠堂】",
-        badge: "戶政第五關",
-        icon: "⚖️",
-        pos: new THREE.Vector3(-22, 0, 16),
-        color: 0x5f27cd,
-        question: "親屬已經死亡但尚未辦理死亡登記，可以拿其身分證、印章辦理各項事情嗎？",
-        desc: "這是一項重大法律觀念！人死亡後其權利能力即告終止，此舉是否合法？",
-        options: [
-          { text: "不行！涉及冒用身分及偽造文書違法", correct: true, note: "非常重要！人死亡後權利能力即消滅，擅自蓋其印章辦理過戶或提款會觸犯刑法偽造文書罪！" },
-          { text: "只要家人同意就可以繼續拿去辦", correct: false, note: "不行！家人同意亦無法對抗國家刑法規定，此屬嚴重違法行為。" },
-          { text: "在辦完出殯之前都可以隨便用", correct: false, note: "錯誤！死亡時間以死亡證明記載為準，此後皆不能再以其名義為法律行為。" },
-          { text: "只要帶里長證明就可以代簽", correct: false, note: "里長無權開立此類背書，切勿觸法！" }
-        ]
-      },
-      {
-        id: 6,
-        title: "前往【世界之窗使館】",
-        badge: "戶政第六關",
-        icon: "🛂",
-        pos: new THREE.Vector3(0, 0, 30),
-        color: 0x54a0ff,
-        question: "首次申請護照到戶政事務所辦理人別確認或首辦護照，必須核對誰的人貌？",
-        desc: "為了防範假冒身份並確保國際護照安全信譽，必須由誰親自到場核對人貌？",
-        options: [
-          { text: "本人親自到場核對", correct: true, note: "標準答案！首次辦理人別確認或申辦護照，依法必須由「申請人本人」親自到戶政所核對人貌！" },
-          { text: "爸爸的容貌就可以", correct: false, note: "不行！護照是個人專屬證件，不能只看爸爸的人貌代辦！" },
-          { text: "奶奶的容貌", correct: false, note: "不行！必須是申請者本人親自接受戶政同仁核對喔！" },
-          { text: "隔壁老王", correct: false, note: "哈哈當然不行！隔壁老王跟你的護照完全沒有關係！" }
-        ]
+    /* ---------------- THREE.JS 場景環境 ---------------- */
+    const container = document.getElementById("canvas-container");
+    const scene = new THREE.Scene();
+    scene.background = new THREE.Color(0xbbf2f6);
+    scene.fog = new THREE.FogExp2(0xbbf2f6, 0.008);
+
+    const camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 1000);
+    const renderer = new THREE.WebGLRenderer({ antialias: true });
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    renderer.shadowMap.enabled = true;
+    renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    container.appendChild(renderer.domElement);
+
+    const hemiLight = new THREE.HemisphereLight(0xffffff, 0x446655, 0.85);
+    scene.add(hemiLight);
+    const sunLight = new THREE.DirectionalLight(0xfffaed, 1.1);
+    sunLight.position.set(35, 60, 30);
+    sunLight.castShadow = true;
+    scene.add(sunLight);
+
+    // 浮島與海水
+    const islandGeo = new THREE.CylinderGeometry(56, 52, 6, 40);
+    const islandMat = new THREE.MeshStandardMaterial({ color: 0x82c855, roughness: 0.6, flatShading: true });
+    const island = new THREE.Mesh(islandGeo, islandMat);
+    island.position.y = -3;
+    island.receiveShadow = true;
+    scene.add(island);
+
+    const rockGeo = new THREE.CylinderGeometry(52, 28, 12, 32);
+    const rockMat = new THREE.MeshStandardMaterial({ color: 0x8d5b4c, roughness: 0.9, flatShading: true });
+    const rock = new THREE.Mesh(rockGeo, rockMat);
+    rock.position.y = -10;
+    scene.add(rock);
+
+    const waterGeo = new THREE.PlaneGeometry(400, 400);
+    const waterMat = new THREE.MeshStandardMaterial({ color: 0x38bdf8, roughness: 0.1, metalness: 0.1, transparent: true, opacity: 0.85 });
+    const water = new THREE.Mesh(waterGeo, waterMat);
+    water.rotation.x = -Math.PI / 2;
+    water.position.y = -6;
+    scene.add(water);
+
+    // 裝飾樹木
+    function createTree(x, z) {
+      const g = new THREE.Group();
+      const trunk = new THREE.Mesh(new THREE.CylinderGeometry(0.3, 0.45, 2.2, 6), new THREE.MeshStandardMaterial({ color: 0x78350f }));
+      trunk.position.y = 1.1;
+      trunk.castShadow = true;
+      g.add(trunk);
+
+      const leafMat = new THREE.MeshStandardMaterial({ color: 0x22c55e, roughness: 0.5, flatShading: true });
+      const leaf1 = new THREE.Mesh(new THREE.ConeGeometry(1.8, 3.0, 6), leafMat);
+      leaf1.position.y = 3.2;
+      leaf1.castShadow = true;
+      g.add(leaf1);
+      g.position.set(x, 0, z);
+      scene.add(g);
+    }
+    for (let i = 0; i < 30; i++) {
+      const angle = (i / 30) * Math.PI * 2;
+      const r = 42 + (Math.random() * 8 - 4);
+      createTree(Math.cos(angle) * r, Math.sin(angle) * r);
+    }
+
+    // 告示牌貼圖生成
+    function makeSignboardTexture(text, id) {
+      const canvas = document.createElement('canvas');
+      canvas.width = 256;
+      canvas.height = 128;
+      const ctx = canvas.getContext('2d');
+      ctx.fillStyle = '#fef3c7';
+      ctx.fillRect(0, 0, 256, 128);
+      ctx.lineWidth = 10;
+      ctx.strokeStyle = '#b45309';
+      ctx.strokeRect(5, 5, 246, 118);
+
+      ctx.fillStyle = '#b45309';
+      ctx.font = 'bold 22px sans-serif';
+      ctx.textAlign = 'center';
+      ctx.fillText(`第 ${id} 關考驗`, 128, 42);
+
+      ctx.fillStyle = '#1e293b';
+      ctx.font = '900 28px sans-serif';
+      ctx.fillText(text, 128, 90);
+
+      return new THREE.CanvasTexture(canvas);
+    }
+
+    const questMeshes = [];
+    QUESTS.forEach(q => {
+      const group = new THREE.Group();
+      group.position.set(q.pos.x, 0, q.pos.z);
+
+      const ringGeo = new THREE.RingGeometry(2.4, 3.2, 32);
+      const ringMat = new THREE.MeshBasicMaterial({ color: 0xf59e0b, side: THREE.DoubleSide });
+      const ring = new THREE.Mesh(ringGeo, ringMat);
+      ring.rotation.x = -Math.PI / 2;
+      ring.position.y = 0.05;
+      group.add(ring);
+
+      const beamGeo = new THREE.CylinderGeometry(0.6, 1.8, 24, 16, 1, true);
+      const beamMat = new THREE.MeshBasicMaterial({ color: 0xfde68a, transparent: true, opacity: 0.35, side: THREE.DoubleSide });
+      const beam = new THREE.Mesh(beamGeo, beamMat);
+      beam.position.y = 12;
+      group.add(beam);
+
+      const post = new THREE.Mesh(new THREE.CylinderGeometry(0.12, 0.12, 2.6, 8), new THREE.MeshStandardMaterial({ color: 0x78350f }));
+      post.position.set(2.4, 1.3, 0);
+      post.castShadow = true;
+      group.add(post);
+
+      const signTex = makeSignboardTexture(q.name, q.id);
+      const signBoardMat = [
+        new THREE.MeshStandardMaterial({ color: 0x92400e }),
+        new THREE.MeshStandardMaterial({ color: 0x92400e }),
+        new THREE.MeshStandardMaterial({ color: 0x92400e }),
+        new THREE.MeshStandardMaterial({ color: 0x92400e }),
+        new THREE.MeshStandardMaterial({ map: signTex }),
+        new THREE.MeshStandardMaterial({ color: 0x92400e })
+      ];
+      const signBoard = new THREE.Mesh(new THREE.BoxGeometry(2.4, 1.3, 0.15), signBoardMat);
+      signBoard.position.set(2.4, 2.2, 0);
+      signBoard.castShadow = true;
+      group.add(signBoard);
+
+      scene.add(group);
+      questMeshes.push({ ...q, group, ring });
+    });
+
+    /* ---------------- 中央巨型投幣箱與實體 3D 投幣按鈕支柱 ---------------- */
+    const vaultGroup = new THREE.Group();
+    vaultGroup.position.set(0, 0, 0);
+
+    // 金屬大金庫
+    const vaultBoxGeo = new THREE.BoxGeometry(4.4, 3.4, 3.4);
+    const vaultBoxMat = new THREE.MeshStandardMaterial({ color: 0xd97706, roughness: 0.3, metalness: 0.8 });
+    const vaultBox = new THREE.Mesh(vaultBoxGeo, vaultBoxMat);
+    vaultBox.position.y = 1.7;
+    vaultBox.castShadow = true;
+    vaultGroup.add(vaultBox);
+
+    // 寬敞投幣孔
+    const slotGeo = new THREE.BoxGeometry(2.8, 0.22, 0.5);
+    const slotMat = new THREE.MeshBasicMaterial({ color: 0x111827 });
+    const slot = new THREE.Mesh(slotGeo, slotMat);
+    slot.position.set(0, 3.41, 0);
+    vaultGroup.add(slot);
+
+    // 旋轉大金幣標誌
+    const bigCoinGeo = new THREE.CylinderGeometry(1.6, 1.6, 0.25, 24);
+    const bigCoinMat = new THREE.MeshStandardMaterial({ color: 0xfacc15, metalness: 0.9, roughness: 0.1 });
+    const bigCoin = new THREE.Mesh(bigCoinGeo, bigCoinMat);
+    bigCoin.rotation.z = Math.PI / 2;
+    bigCoin.position.y = 5.4;
+    vaultGroup.add(bigCoin);
+
+    // 金庫光圈
+    const vaultRingGeo = new THREE.RingGeometry(4.0, 5.0, 32);
+    const vaultRingMat = new THREE.MeshBasicMaterial({ color: 0xf59e0b, side: THREE.DoubleSide, transparent: true, opacity: 0.8 });
+    const vaultRing = new THREE.Mesh(vaultRingGeo, vaultRingMat);
+    vaultRing.rotation.x = -Math.PI / 2;
+    vaultRing.position.y = 0.05;
+    vaultGroup.add(vaultRing);
+
+    // 投幣箱旁邊的實體按鈕台座 (臨場感按鈕支柱)
+    const buttonStandGeo = new THREE.CylinderGeometry(0.5, 0.6, 1.8, 16);
+    const buttonStandMat = new THREE.MeshStandardMaterial({ color: 0x475569, metalness: 0.5 });
+    const buttonStand = new THREE.Mesh(buttonStandGeo, buttonStandMat);
+    buttonStand.position.set(3.2, 0.9, 2.2);
+    vaultGroup.add(buttonStand);
+
+    const buttonCapGeo = new THREE.CylinderGeometry(0.42, 0.42, 0.3, 16);
+    const buttonCapMat = new THREE.MeshStandardMaterial({ color: 0xef4444, roughness: 0.2, emissive: 0x7f1d1d });
+    const buttonCap = new THREE.Mesh(buttonCapGeo, buttonCapMat);
+    buttonCap.position.set(3.2, 1.9, 2.2);
+    vaultGroup.add(buttonCap);
+
+    scene.add(vaultGroup);
+
+    // 投幣動態粒子群 (Coin Shower)
+    const flyingCoins = [];
+    function spawnCoinInsertAnimation() {
+      for (let i = 0; i < 24; i++) {
+        const cGeo = new THREE.CylinderGeometry(0.3, 0.3, 0.06, 16);
+        const cMat = new THREE.MeshStandardMaterial({ color: 0xfacc15, metalness: 0.9, roughness: 0.1 });
+        const cMesh = new THREE.Mesh(cGeo, cMat);
+        
+        // 從按鈕上方或玩家身邊飛入投幣孔
+        cMesh.position.set(2.8 + (Math.random()-0.5)*1.2, 2.5 + Math.random()*2, 2.0 + (Math.random()-0.5)*1.2);
+        scene.add(cMesh);
+
+        flyingCoins.push({
+        mesh: cMesh,
+        startPos: cMesh.position.clone(),
+        targetPos: new THREE.Vector3(0, 3.42, 0),
+        progress: 0,
+        speed: 0.025 + Math.random() * 0.02,
+        arcHeight: 2.5 + Math.random() * 1.5,
+        delay: i * 3
+      });
+    }
+  }
+
+  /* ---------------- 精緻手辦 3D 人物公仔建模 (解決猩猩臉與頭髮覆蓋問題) ---------------- */
+  let playerGroup = new THREE.Group();
+  let leftLeg, rightLeg, leftArm, rightArm;
+
+  function buildCharacter(gender) {
+    scene.remove(playerGroup);
+    playerGroup = new THREE.Group();
+
+    // 乾淨透亮日系手辦膚色
+    const skinMat = new THREE.MeshStandardMaterial({ color: 0xffe1d2, roughness: 0.4 });
+    const vestYellowMat = new THREE.MeshStandardMaterial({ color: 0xffd000, roughness: 0.35 });
+    const whiteShirtMat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.5 });
+
+    // 1. 身體軀幹
+    const bodyGroup = new THREE.Group();
+    const torsoGeo = new THREE.CylinderGeometry(0.65, 0.72, 1.4, 16);
+    const torso = new THREE.Mesh(torsoGeo, vestYellowMat);
+    torso.position.y = 1.6;
+    torso.castShadow = true;
+    bodyGroup.add(torso);
+
+    // 工作證胸牌
+    const badgeGeo = new THREE.BoxGeometry(0.32, 0.4, 0.06);
+    const badgeMat = new THREE.MeshStandardMaterial({ color: 0xffffff });
+    const badge = new THREE.Mesh(badgeGeo, badgeMat);
+    badge.position.set(0, 1.55, 0.72);
+    bodyGroup.add(badge);
+
+    const strapGeo = new THREE.TorusGeometry(0.48, 0.03, 8, 16, Math.PI);
+    const strapMat = new THREE.MeshBasicMaterial({ color: 0x0284c7 });
+    const strap = new THREE.Mesh(strapGeo, strapMat);
+    strap.position.set(0, 1.9, 0.38);
+    strap.rotation.x = Math.PI / 3;
+    bodyGroup.add(strap);
+
+    // 2. 頭部（臉部露出在最前方，絕不被頭髮遮擋）
+    const headGroup = new THREE.Group();
+    headGroup.position.y = 2.75;
+
+    // 白皙乾淨臉蛋
+    const headGeo = new THREE.SphereGeometry(0.68, 24, 24);
+    const head = new THREE.Mesh(headGeo, skinMat);
+    head.castShadow = true;
+    headGroup.add(head);
+
+    // 水汪汪日系黑眼珠（放在面部前方偏下位置，清秀可愛）
+    const eyeMat = new THREE.MeshBasicMaterial({ color: 0x1e293b });
+    const pupilWhiteMat = new THREE.MeshBasicMaterial({ color: 0xffffff });
+
+    const lEye = new THREE.Mesh(new THREE.SphereGeometry(0.09, 12, 12), eyeMat);
+    lEye.position.set(-0.24, 0.0, 0.64);
+    const lPupil = new THREE.Mesh(new THREE.SphereGeometry(0.035, 8, 8), pupilWhiteMat);
+    lPupil.position.set(-0.22, 0.03, 0.71);
+    headGroup.add(lEye, lPupil);
+
+    const rEye = new THREE.Mesh(new THREE.SphereGeometry(0.09, 12, 12), eyeMat);
+    rEye.position.set(0.24, 0.0, 0.64);
+    const rPupil = new THREE.Mesh(new THREE.SphereGeometry(0.035, 8, 8), pupilWhiteMat);
+    rPupil.position.set(0.26, 0.03, 0.71);
+    headGroup.add(rEye, rPupil);
+
+    // 粉嫩腮紅
+    const blushGeo = new THREE.CircleGeometry(0.11, 16);
+    const blushMat = new THREE.MeshBasicMaterial({ color: 0xfb7185, side: THREE.DoubleSide });
+    const lBlush = new THREE.Mesh(blushGeo, blushMat);
+    lBlush.position.set(-0.38, -0.12, 0.61);
+    const rBlush = new THREE.Mesh(blushGeo, blushMat);
+    rBlush.position.set(0.38, -0.12, 0.61);
+    headGroup.add(lBlush, rBlush);
+
+    // 微笑小嘴
+    const mouthGeo = new THREE.TorusGeometry(0.08, 0.02, 6, 12, Math.PI);
+    const mouthMat = new THREE.MeshBasicMaterial({ color: 0xe11d48 });
+    const mouth = new THREE.Mesh(mouthGeo, mouthMat);
+    mouth.position.set(0, -0.18, 0.65);
+    mouth.rotation.z = Math.PI;
+    headGroup.add(mouth);
+
+    // 頭髮只包覆後腦勺與頭頂上方，絕不遮住五官！
+    if (gender === 'female') {
+      const hairMat = new THREE.MeshStandardMaterial({ color: 0xf472b6, roughness: 0.5 });
+      // 後腦勺半球
+      const backHairGeo = new THREE.SphereGeometry(0.72, 20, 20, 0, Math.PI * 2, 0, Math.PI * 0.68);
+      const backHair = new THREE.Mesh(backHairGeo, hairMat);
+      backHair.position.set(0, 0.08, -0.12);
+      headGroup.add(backHair);
+
+      // 頭頂蓬鬆短髮
+      const topHair = new THREE.Mesh(new THREE.SphereGeometry(0.55, 16, 16), hairMat);
+      topHair.position.set(0, 0.45, 0.05);
+      headGroup.add(topHair);
+
+      // 可愛薄瀏海（位於頭頂斜上方，不遮擋眼睛）
+      const bang = new THREE.Mesh(new THREE.BoxGeometry(0.65, 0.16, 0.18), hairMat);
+      bang.position.set(0, 0.46, 0.52);
+      bang.rotation.x = -0.3;
+      headGroup.add(bang);
+
+      // 兩側垂肩短髮
+      const lSide = new THREE.Mesh(new THREE.CylinderGeometry(0.18, 0.28, 0.8, 10), hairMat);
+      lSide.position.set(-0.62, -0.1, -0.05);
+      lSide.rotation.z = 0.15;
+      const rSide = new THREE.Mesh(new THREE.CylinderGeometry(0.18, 0.28, 0.8, 10), hairMat);
+      rSide.position.set(0.62, -0.1, -0.05);
+      rSide.rotation.z = -0.15;
+      headGroup.add(lSide, rSide);
+
+      // 藍色短裙
+      const skirt = new THREE.Mesh(new THREE.ConeGeometry(0.86, 0.55, 16), new THREE.MeshStandardMaterial({ color: 0x2563eb }));
+      skirt.position.y = 0.95;
+      bodyGroup.add(skirt);
+    } else {
+      const hairMat = new THREE.MeshStandardMaterial({ color: 0xc2410c, roughness: 0.5 });
+      // 男角後腦勺短髮
+      const backHair = new THREE.Mesh(new THREE.SphereGeometry(0.72, 20, 20, 0, Math.PI * 2, 0, Math.PI * 0.65), hairMat);
+      backHair.position.set(0, 0.08, -0.12);
+      headGroup.add(backHair);
+
+      // 頭頂短髮碎層
+      const topHair = new THREE.Mesh(new THREE.SphereGeometry(0.56, 16, 16), hairMat);
+      topHair.position.set(0, 0.42, 0.02);
+      headGroup.add(topHair);
+
+      // 額頭碎劉海
+      for (let i = 0; i < 3; i++) {
+        const spike = new THREE.Mesh(new THREE.ConeGeometry(0.15, 0.38, 6), hairMat);
+        spike.position.set(-0.25 + i * 0.25, 0.44, 0.55);
+        spike.rotation.z = 0.2 - i * 0.2;
+        spike.rotation.x = -0.25;
+        headGroup.add(spike);
       }
+    }
+    bodyGroup.add(headGroup);
+
+    // 3. 雙手臂
+    const armGeo = new THREE.CylinderGeometry(0.18, 0.18, 0.9, 12);
+    leftArm = new THREE.Mesh(armGeo, whiteShirtMat);
+    leftArm.position.set(-0.85, 1.7, 0);
+    rightArm = new THREE.Mesh(armGeo, whiteShirtMat);
+    rightArm.position.set(0.85, 1.7, 0);
+    bodyGroup.add(leftArm, rightArm);
+
+    // 4. 雙腿與靴子
+    const legGeo = new THREE.CylinderGeometry(0.2, 0.2, 0.9, 12);
+    const legMat = (gender === 'female') ? skinMat : new THREE.MeshStandardMaterial({ color: 0xd6d3d1 });
+    const bootMat = (gender === 'female') ? new THREE.MeshStandardMaterial({ color: 0xeab308 }) : new THREE.MeshStandardMaterial({ color: 0xb45309 });
+
+    leftLeg = new THREE.Group();
+    leftLeg.position.set(-0.35, 0.9, 0);
+    const lLegMesh = new THREE.Mesh(legGeo, legMat);
+    lLegMesh.position.y = -0.45;
+    const lBoot = new THREE.Mesh(new THREE.BoxGeometry(0.36, 0.35, 0.55), bootMat);
+    lBoot.position.set(0, -0.75, 0.1);
+    leftLeg.add(lLegMesh, lBoot);
+
+    rightLeg = new THREE.Group();
+    rightLeg.position.set(0.35, 0.9, 0);
+    const rLegMesh = new THREE.Mesh(legGeo, legMat);
+    rLegMesh.position.y = -0.45;
+    const rBoot = new THREE.Mesh(new THREE.BoxGeometry(0.36, 0.35, 0.55), bootMat);
+    rBoot.position.set(0, -0.75, 0.1);
+    rightLeg.add(rLegMesh, rBoot);
+
+    bodyGroup.add(leftLeg, rightLeg);
+
+    playerGroup.add(bodyGroup);
+    playerGroup.position.set(0, 0, 18);
+    scene.add(playerGroup);
+  }
+
+  /* ---------------- 四種特色「戶政違法魔物」生成器 ---------------- */
+    const monsters = [];
+
+    // 怪物銘牌貼圖
+    function makeMonsterTagTexture(name, color) {
+      const c = document.createElement('canvas');
+      c.width = 128;
+      c.height = 48;
+      const ctx = c.getContext('2d');
+      ctx.fillStyle = 'rgba(15, 23, 42, 0.85)';
+      ctx.roundRect ? ctx.roundRect(4, 4, 120, 40, 10) : ctx.fillRect(4, 4, 120, 40);
+      ctx.fill();
+      ctx.strokeStyle = color;
+      ctx.lineWidth = 4;
+      ctx.stroke();
+
+      ctx.fillStyle = '#ffffff';
+      ctx.font = 'bold 15px sans-serif';
+      ctx.textAlign = 'center';
+      ctx.fillText(name, 64, 28);
+      return new THREE.CanvasTexture(c);
+    }
+
+    const MONSTER_TYPES = [
+      { type: 1, name: "印鑑偽冒怪", shape: "box", color: 0xef4444, tagColor: "#ef4444" },
+      { type: 2, name: "身分證偽冒怪", shape: "card", color: 0x3b82f6, tagColor: "#3b82f6" },
+      { type: 3, name: "證人偽冒怪", shape: "cone", color: 0xa855f7, tagColor: "#a855f7" },
+      { type: 4, name: "本人偽冒怪", shape: "octa", color: 0x10b981, tagColor: "#10b981" }
     ];
 
-    /* ==========================================================
-       3. THREE.JS SCENE, 3D FLAT ISLAND & ARCHITECTURE
-       ========================================================== */
-    let scene, camera, renderer;
-    let playerGroup, playerLeftLeg, playerRightLeg;
-    let waterMesh;
-    let checkpointObjects = [];
-    let celebrationParticles = [];
-    let monsters = []; // Living wandering low-poly monsters
+    function spawnMonsters() {
+      // 隨意生成 12 隻，四種魔物均勻分布
+      for (let i = 0; i < 12; i++) {
+        const mInfo = MONSTER_TYPES[i % 4];
+        const mGroup = new THREE.Group();
 
-    // Player Physics & State
-    const playerPos = new THREE.Vector3(0, 0, 0); // Spawn in village hub center
-    const playerVelocity = new THREE.Vector3();
-    let playerHeading = 0; // rotation Y
+        let geom;
+        if (mInfo.shape === "box") {
+          // 印章立方體
+          geom = new THREE.BoxGeometry(1.2, 1.4, 1.2);
+        } else if (mInfo.shape === "card") {
+          // 晶片證件卡
+          geom = new THREE.BoxGeometry(1.5, 0.9, 0.3);
+        } else if (mInfo.shape === "cone") {
+          // 幽靈三角錐
+          geom = new THREE.ConeGeometry(0.85, 1.6, 6);
+        } else {
+          // 雙面菱形面具
+          geom = new THREE.OctahedronGeometry(0.85);
+        }
+
+        const bodyMat = new THREE.MeshStandardMaterial({
+          color: mInfo.color,
+          roughness: 0.3,
+          metalness: 0.2,
+          flatShading: true
+        });
+        const body = new THREE.Mesh(geom, bodyMat);
+        body.position.y = 0.85;
+        body.castShadow = true;
+        mGroup.add(body);
+
+        // 惡魔眼睛
+        const eyeMat = new THREE.MeshBasicMaterial({ color: 0xffffff });
+        const pupilMat = new THREE.MeshBasicMaterial({ color: 0x000000 });
+        const e1 = new THREE.Mesh(new THREE.SphereGeometry(0.16, 8, 8), eyeMat);
+        e1.position.set(-0.25, 0.95, 0.65);
+        const p1 = new THREE.Mesh(new THREE.SphereGeometry(0.08, 8, 8), pupilMat);
+        p1.position.set(-0.25, 0.95, 0.78);
+        mGroup.add(e1, p1);
+
+        const e2 = new THREE.Mesh(new THREE.SphereGeometry(0.16, 8, 8), eyeMat);
+        e2.position.set(0.25, 0.95, 0.65);
+        const p2 = new THREE.Mesh(new THREE.SphereGeometry(0.08, 8, 8), pupilMat);
+        p2.position.set(0.25, 0.95, 0.78);
+        mGroup.add(e2, p2);
+
+        // 頭頂立體銘牌
+        const tagTex = makeMonsterTagTexture(mInfo.name, mInfo.tagColor);
+        const tagPlane = new THREE.Mesh(
+          new THREE.PlaneGeometry(1.6, 0.6),
+          new THREE.MeshBasicMaterial({ map: tagTex, transparent: true, side: THREE.DoubleSide })
+        );
+        tagPlane.position.y = 2.0;
+        mGroup.add(tagPlane);
+
+        // 隨機分布在地圖周圍
+        const rad = 14 + Math.random() * 32;
+        const ang = (i / 12) * Math.PI * 2 + (Math.random() - 0.5) * 0.4;
+        mGroup.position.set(Math.cos(ang) * rad, 0, Math.sin(ang) * rad);
+
+        scene.add(mGroup);
+        monsters.push({
+          group: mGroup,
+          alive: true,
+          type: mInfo.type,
+          name: mInfo.name,
+          dir: new THREE.Vector3((Math.random() - 0.5) * 0.04, 0, (Math.random() - 0.5) * 0.04),
+          animOffset: Math.random() * 10
+        });
+      }
+    }
+    spawnMonsters();
+
+    /* ---------------- 輸入與物理控制 ---------------- */
+    const keys = { w: false, s: false, a: false, d: false };
+    let playerVelY = 0;
+    const gravity = -0.018;
     let isGrounded = true;
-    let legCycle = 0;
 
-    // Game Progression State
-    let currentStage = 0; // 0 to 5, 6 is victory
-    let coins = 0;
-    let stompedMonsters = 0;
-    let isModalOpen = true; // starts open with Intro Start Screen
-    let nearCheckpointIndex = -1;
-    let hasAlertedProximity = false;
-
-    function init3D() {
-      const container = document.getElementById('webgl-canvas-container');
-
-      // Scene Setup
-      scene = new THREE.Scene();
-      scene.background = new THREE.Color(0x81ecec);
-      scene.fog = new THREE.FogExp2(0x81ecec, 0.010);
-
-      // Camera Setup
-      camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 1000);
-      camera.position.set(playerPos.x, playerPos.y + 9, playerPos.z + 14);
-
-      // WebGL Renderer
-      renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false });
-      renderer.setSize(window.innerWidth, window.innerHeight);
-      renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
-      renderer.shadowMap.enabled = true;
-      renderer.shadowMap.type = THREE.PCFSoftShadowMap;
-      container.appendChild(renderer.domElement);
-
-      // Lights
-      const ambientLight = new THREE.AmbientLight(0xffffff, 0.75);
-      scene.add(ambientLight);
-
-      const sunLight = new THREE.DirectionalLight(0xfffaed, 1.15);
-      sunLight.position.set(35, 55, 30);
-      sunLight.castShadow = true;
-      sunLight.shadow.mapSize.width = 1024;
-      sunLight.shadow.mapSize.height = 1024;
-      sunLight.shadow.camera.near = 10;
-      sunLight.shadow.camera.far = 150;
-      sunLight.shadow.camera.left = -55;
-      sunLight.shadow.camera.right = 55;
-      sunLight.shadow.camera.top = 55;
-      sunLight.shadow.camera.bottom = -55;
-      scene.add(sunLight);
-
-      const hemiLight = new THREE.HemisphereLight(0xdff9fb, 0x55efc4, 0.35);
-      scene.add(hemiLight);
-
-      // Build Map Components
-      createFlatTerrainIsland();
-      createOceanPlane();
-      createDecorations();
-      createCheckpoints3D();
-      createPlayerAvatar();
-      createFloatingClouds();
-
-      // Spawn initial cute monsters
-      spawnMonsters(14);
-
-      // Event Listeners
-      window.addEventListener('resize', onWindowResize);
-      setupInputHandlers();
-    }
-
-    /* ---------------- Flat Island Terrain ---------------- */
-    function createFlatTerrainIsland() {
-      const islandGroup = new THREE.Group();
-      scene.add(islandGroup);
-
-      // Expanded island disk to accommodate 6 shrines
-      const topGeo = new THREE.CylinderGeometry(52, 54, 3, 36);
-      const pos = topGeo.attributes.position;
-      for (let i = 0; i < pos.count; i++) {
-        let x = pos.getX(i);
-        let y = pos.getY(i);
-        let z = pos.getZ(i);
-        let dist = Math.sqrt(x*x + z*z);
-        if (dist > 40) {
-          let wobble = Math.sin(Math.atan2(z, x) * 8) * 3.0;
-          x += (x / dist) * wobble;
-          z += (z / dist) * wobble;
-        }
-        pos.setXYZ(i, x, y, z);
+    window.addEventListener("keydown", (e) => {
+      sound.init();
+      if (isModalOpen) return;
+      const k = e.key.toLowerCase();
+      if (k === "w" || k === "arrowup") keys.w = true;
+      if (k === "s" || k === "arrowdown") keys.s = true;
+      if (k === "a" || k === "arrowleft") keys.a = true;
+      if (k === "d" || k === "arrowright") keys.d = true;
+      if (e.code === "Space" && isGrounded) {
+        playerVelY = 0.36;
+        isGrounded = false;
+        sound.playJump();
       }
-      topGeo.computeVertexNormals();
+      if (k === "e") triggerCurrentInteraction();
+    });
 
-      const grassMat = new THREE.MeshStandardMaterial({
-        color: 0x55efc4,
-        roughness: 0.8,
-        flatShading: true
-      });
-      const topPlate = new THREE.Mesh(topGeo, grassMat);
-      topPlate.position.y = -1.5;
-      topPlate.receiveShadow = true;
-      islandGroup.add(topPlate);
+    window.addEventListener("keyup", (e) => {
+      const k = e.key.toLowerCase();
+      if (k === "w" || k === "arrowup") keys.w = false;
+      if (k === "s" || k === "arrowdown") keys.s = false;
+      if (k === "a" || k === "arrowleft") keys.a = false;
+      if (k === "d" || k === "arrowright") keys.d = false;
+    });
 
-      // Cliff base
-      const cliffGeo = new THREE.CylinderGeometry(53, 32, 14, 28);
-      const cliffMat = new THREE.MeshStandardMaterial({
-        color: 0x8b5a2b,
-        roughness: 0.9,
-        flatShading: true
-      });
-      const cliff = new THREE.Mesh(cliffGeo, cliffMat);
-      cliff.position.y = -9.5;
-      cliff.receiveShadow = true;
-      islandGroup.add(cliff);
+    const bindBtn = (id, k) => {
+      const el = document.getElementById(id);
+      el.addEventListener("touchstart", (e) => { e.preventDefault(); sound.init(); keys[k] = true; });
+      el.addEventListener("touchend", (e) => { e.preventDefault(); keys[k] = false; });
+      el.addEventListener("mousedown", () => { sound.init(); keys[k] = true; });
+      el.addEventListener("mouseup", () => { keys[k] = false; });
+    };
+    bindBtn("btn-up", "w");
+    bindBtn("btn-down", "s");
+    bindBtn("btn-left", "a");
+    bindBtn("btn-right", "d");
 
-      // Paved Stone Paths connecting Hub to all 6 Checkpoints
-      CHECKPOINTS.forEach(cp => {
-        createStonePath(new THREE.Vector3(0, 0.05, 0), cp.pos);
-      });
+    const interactBtn = document.getElementById("btn-interact");
+    interactBtn.addEventListener("click", () => {
+      sound.init();
+      triggerCurrentInteraction();
+    });
+    interactBtn.addEventListener("pointerdown", () => {
+      sound.init();
+      triggerCurrentInteraction();
+    });
+    interactBtn.addEventListener("touchstart", (e) => {
+      e.preventDefault();
+      sound.init();
+      triggerCurrentInteraction();
+    });
 
-      // Central Hub Plaza
-      createSpawnPlaza();
-    }
-
-    function createStonePath(from, to) {
-      const dist = from.distanceTo(to);
-      const steps = Math.floor(dist / 2.3);
-      for (let i = 0; i <= steps; i++) {
-        const p = new THREE.Vector3().lerpVectors(from, to, i / steps);
-        const paver = new THREE.Mesh(
-          new THREE.BoxGeometry(1.6 + Math.random()*0.3, 0.1, 1.5 + Math.random()*0.3),
-          new THREE.MeshStandardMaterial({ color: 0xecf0f1, flatShading: true, roughness: 0.7 })
-        );
-        paver.position.set(p.x + (Math.random()-0.5)*0.3, 0.05, p.z + (Math.random()-0.5)*0.3);
-        paver.rotation.y = (Math.random()-0.5)*0.2;
-        paver.receiveShadow = true;
-        scene.add(paver);
+    function triggerCurrentInteraction() {
+      if (currentNearbyType === "quest" && currentNearbyQuest) {
+        openQuiz(currentNearbyQuest);
+      } else if (currentNearbyType === "vault") {
+        openVaultModal();
       }
     }
 
-    function createSpawnPlaza() {
-      const plaza = new THREE.Mesh(
-        new THREE.CylinderGeometry(6, 6.2, 0.15, 20),
-        new THREE.MeshStandardMaterial({ color: 0xffeaa7, flatShading: true })
-      );
-      plaza.position.set(0, 0.08, 0);
-      plaza.receiveShadow = true;
-      scene.add(plaza);
+    /* ---------------- 互動答題機制 ---------------- */
+    function openQuiz(q) {
+      isModalOpen = true;
+      document.getElementById("interaction-prompt").classList.add("hidden");
+      document.getElementById("quiz-modal").classList.remove("hidden");
+      document.getElementById("quiz-badge").textContent = `第 ${q.id} 關考驗・${q.name}`;
+      document.getElementById("quiz-title").textContent = q.q;
+      document.getElementById("quiz-desc").textContent = `答對可獲得 ${q.reward} 枚金幣！`;
+      document.getElementById("quiz-feedback").textContent = "";
 
-      // Welcome Obelisk at central plaza
-      const obelisk = new THREE.Mesh(
-        new THREE.ConeGeometry(0.8, 2.5, 4),
-        new THREE.MeshStandardMaterial({ color: 0xf39c12, flatShading: true })
-      );
-      obelisk.position.set(0, 1.25, 0);
-      obelisk.castShadow = true;
-      scene.add(obelisk);
-    }
-
-    /* ---------------- Ocean Plane ---------------- */
-    function createOceanPlane() {
-      const oceanGeo = new THREE.PlaneGeometry(450, 450, 40, 40);
-      const oceanMat = new THREE.MeshStandardMaterial({
-        color: 0x0984e3,
-        transparent: true,
-        opacity: 0.85,
-        roughness: 0.2,
-        metalness: 0.1,
-        flatShading: true
+      const optBox = document.getElementById("quiz-options");
+      optBox.innerHTML = "";
+      q.options.forEach((optText, idx) => {
+        const btn = document.createElement("button");
+        btn.className = "w-full text-left p-3.5 rounded-2xl border-2 border-amber-200 bg-white hover:bg-amber-50 font-bold text-xs sm:text-sm text-slate-800 transition active:scale-98 shadow-sm";
+        btn.textContent = `${['A','B','C','D'][idx]}. ${optText}`;
+        btn.onclick = () => checkQuizAnswer(q, idx, btn);
+        optBox.appendChild(btn);
       });
-      waterMesh = new THREE.Mesh(oceanGeo, oceanMat);
-      waterMesh.rotation.x = -Math.PI / 2;
-      waterMesh.position.y = -3.2;
-      waterMesh.receiveShadow = true;
-      scene.add(waterMesh);
     }
 
-    /* ---------------- Island Vegetation ---------------- */
-    function createDecorations() {
-      for (let i = 0; i < 75; i++) {
-        const x = (Math.random() - 0.5) * 85;
-        const z = (Math.random() - 0.5) * 85;
-        const dCenter = Math.sqrt(x*x + z*z);
-        if (dCenter > 46 || dCenter < 7) continue;
+    function checkQuizAnswer(q, selectedIdx, clickedBtn) {
+      const fb = document.getElementById("quiz-feedback");
+      if (selectedIdx === q.ans) {
+        sound.playCorrect();
+        clickedBtn.className = "w-full text-left p-3.5 rounded-2xl border-2 border-emerald-500 bg-emerald-500 text-white font-black text-xs sm:text-sm shadow-md";
+        fb.className = "text-xs sm:text-sm font-extrabold text-emerald-600 mt-2";
+        fb.textContent = `✨ 答對了！獲得 ${q.reward} 枚金幣！`;
+        
+        coins += q.reward;
+        clearedCount++;
+        document.getElementById("ui-coins").textContent = `${coins} / 1200`;
+        document.getElementById("ui-progress").textContent = `考驗：${clearedCount}/6 關 ｜ 踩怪：${stompCount}/4`;
 
-        let nearCheck = false;
-        CHECKPOINTS.forEach(cp => {
-          if (cp.pos.distanceTo(new THREE.Vector3(x, 0, z)) < 6) nearCheck = true;
-        });
-        if (nearCheck) continue;
+        q.ring.material.color.setHex(0x22c55e);
 
-        createPineTree(x, z);
+        setTimeout(() => {
+          document.getElementById("quiz-modal").classList.add("hidden");
+          isModalOpen = false;
+        }, 1200);
+      } else {
+        sound.playWrong();
+        clickedBtn.className = "w-full text-left p-3.5 rounded-2xl border-2 border-rose-400 bg-rose-50 text-rose-700 font-bold text-xs sm:text-sm";
+        fb.className = "text-xs sm:text-sm font-extrabold text-rose-600 mt-2";
+        fb.textContent = "💡 答案不對喔！請再想一想～";
       }
     }
 
-    function createPineTree(x, z) {
-      const tree = new THREE.Group();
-      const trunk = new THREE.Mesh(
-        new THREE.CylinderGeometry(0.25, 0.35, 1.5, 6),
-        new THREE.MeshStandardMaterial({ color: 0x795548, flatShading: true })
-      );
-      trunk.position.y = 0.75;
-      trunk.castShadow = true;
-      tree.add(trunk);
+    /* ---------------- 中央金庫投幣彈窗畫面 ---------------- */
+    function openVaultModal() {
+      isModalOpen = true;
+      document.getElementById("interaction-prompt").classList.add("hidden");
+      
+      const vaultModal = document.getElementById("vault-modal");
+      vaultModal.classList.remove("hidden");
 
-      const leafColor = Math.random() > 0.5 ? 0x00b894 : 0x05c46b;
-      const leafMat = new THREE.MeshStandardMaterial({ color: leafColor, flatShading: true });
-      const c1 = new THREE.Mesh(new THREE.ConeGeometry(1.4, 1.8, 6), leafMat);
-      c1.position.y = 1.9;
-      c1.castShadow = true;
-      tree.add(c1);
+      document.getElementById("vault-check-coins").textContent = `${coins} / 1200`;
+      document.getElementById("vault-check-monsters").textContent = `${stompCount} / 4 隻`;
 
-      const c2 = new THREE.Mesh(new THREE.ConeGeometry(1.0, 1.5, 6), leafMat);
-      c2.position.y = 2.8;
-      c2.castShadow = true;
-      tree.add(c2);
+      const statusMsg = document.getElementById("vault-status-msg");
+      const depositBtn = document.getElementById("btn-do-deposit");
 
-      const s = 0.8 + Math.random() * 0.5;
-      tree.scale.set(s, s, s);
-      tree.position.set(x, 0, z);
-      scene.add(tree);
-    }
+      const canSubmit = (coins >= 1200 && stompCount >= 4);
 
-    /* ---------------- Checkpoint 3D Shrines (6 Distinct Landmarks) ---------------- */
-    function createCheckpoints3D() {
-      CHECKPOINTS.forEach((cp, idx) => {
-        const group = new THREE.Group();
-        group.position.copy(cp.pos);
+      if (canSubmit) {
+        statusMsg.className = "text-xs font-black text-emerald-600 pt-1 border-t border-amber-200";
+        statusMsg.textContent = "🎉 條件已完全達成！請點擊下方按鈕進行投幣！";
+        depositBtn.className = "flex-1 py-3 bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 text-white font-black rounded-xl text-sm transition shadow-lg cursor-pointer animate-pulse";
+        depositBtn.onclick = () => {
+          vaultModal.classList.add("hidden");
+          executeVaultDepositAnimation();
+        };
+      } else {
+        const diffScore = Math.max(0, 1200 - coins);
+        const diffMonsters = Math.max(0, 4 - stompCount);
+        let msg = "尚未達成條件：";
+        if (diffScore > 0) msg += ` 尚缺 ${diffScore} 金幣；`;
+        if (diffMonsters > 0) msg += ` 需再踩扁 ${diffMonsters} 隻魔物；`;
+        statusMsg.className = "text-xs font-black text-rose-500 pt-1 border-t border-amber-200";
+        statusMsg.textContent = msg;
 
-        // Ground Ring
-        const ringGeo = new THREE.RingGeometry(2.6, 3.1, 32);
-        const ringMat = new THREE.MeshBasicMaterial({
-          color: cp.color,
-          side: THREE.DoubleSide,
-          transparent: true,
-          opacity: 0.85
-        });
-        const ring = new THREE.Mesh(ringGeo, ringMat);
-        ring.rotation.x = -Math.PI / 2;
-        ring.position.y = 0.08;
-        group.add(ring);
-
-        // Vertical Guide Beacon
-        const beaconGeo = new THREE.CylinderGeometry(0.35, 0.35, 65, 16);
-        const beaconMat = new THREE.MeshBasicMaterial({
-          color: cp.color,
-          transparent: true,
-          opacity: 0.45
-        });
-        const beacon = new THREE.Mesh(beaconGeo, beaconMat);
-        beacon.position.y = 32.5;
-        group.add(beacon);
-
-        // Custom 3D Landmark Themes for 6 Shrines
-        if (idx === 0) {
-          // 1. Marriage Gate (Pink/Red Love Arch)
-          const archGeo = new THREE.TorusGeometry(2.4, 0.25, 8, 24, Math.PI);
-          const arch = new THREE.Mesh(archGeo, new THREE.MeshStandardMaterial({ color: 0xff4757, flatShading: true }));
-          arch.rotation.z = Math.PI;
-          arch.castShadow = true;
-          group.add(arch);
-
-          const heart = new THREE.Mesh(
-            new THREE.OctahedronGeometry(0.75, 0),
-            new THREE.MeshStandardMaterial({ color: 0xff6b81, emissive: 0xff4757, emissiveIntensity: 0.5, flatShading: true })
-          );
-          heart.position.set(0, 2.5, 0);
-          group.add(heart);
-
-        } else if (idx === 1) {
-          // 2. Seal / Stamp Monument (Giant Golden Seal)
-          const base = new THREE.Mesh(
-            new THREE.BoxGeometry(2.4, 0.8, 2.4),
-            new THREE.MeshStandardMaterial({ color: 0xffa502, metalness: 0.6, roughness: 0.3, flatShading: true })
-          );
-          base.position.set(0, 0.4, 0);
-          base.castShadow = true;
-          group.add(base);
-
-          const knob = new THREE.Mesh(
-            new THREE.CylinderGeometry(0.5, 0.8, 1.8, 8),
-            new THREE.MeshStandardMaterial({ color: 0xd35400, flatShading: true })
-          );
-          knob.position.set(0, 1.6, 0);
-          knob.castShadow = true;
-          group.add(knob);
-
-        } else if (idx === 2) {
-          // 3. Migration Torii / Portal
-          const postMat = new THREE.MeshStandardMaterial({ color: 0x2ed573, flatShading: true });
-          const p1 = new THREE.Mesh(new THREE.CylinderGeometry(0.25, 0.25, 3.8, 8), postMat);
-          p1.position.set(-1.8, 1.9, 0);
-          p1.castShadow = true;
-          group.add(p1);
-
-          const p2 = new THREE.Mesh(new THREE.CylinderGeometry(0.25, 0.25, 3.8, 8), postMat);
-          p2.position.set(1.8, 1.9, 0);
-          p2.castShadow = true;
-          group.add(p2);
-
-          const cross = new THREE.Mesh(new THREE.BoxGeometry(4.4, 0.4, 0.4), postMat);
-          cross.position.set(0, 3.6, 0);
-          cross.castShadow = true;
-          group.add(cross);
-
-        } else if (idx === 3) {
-          // 4. Baby Birth Hall (Baby Bottle / Stroller Landmark)
-          const bottleGroup = new THREE.Group();
-          const glassBody = new THREE.Mesh(
-            new THREE.CylinderGeometry(0.7, 0.7, 2.0, 16),
-            new THREE.MeshStandardMaterial({ color: 0xffffff, transparent: true, opacity: 0.85 })
-          );
-          glassBody.position.y = 1.0;
-          bottleGroup.add(glassBody);
-
-          const collar = new THREE.Mesh(
-            new THREE.CylinderGeometry(0.75, 0.75, 0.4, 16),
-            new THREE.MeshStandardMaterial({ color: 0x1dd1a1 })
-          );
-          collar.position.y = 2.1;
-          bottleGroup.add(collar);
-
-          const nipple = new THREE.Mesh(
-            new THREE.ConeGeometry(0.45, 0.8, 16),
-            new THREE.MeshStandardMaterial({ color: 0xfeca57 })
-          );
-          nipple.position.y = 2.65;
-          bottleGroup.add(nipple);
-          bottleGroup.position.y = 0.2;
-          group.add(bottleGroup);
-
-        } else if (idx === 4) {
-          // 5. Deceased Legal Integrity Shrine (Solemn Stone Stele with Scales)
-          const stele = new THREE.Mesh(
-            new THREE.BoxGeometry(1.6, 3.6, 0.6),
-            new THREE.MeshStandardMaterial({ color: 0x5f27cd, roughness: 0.6, flatShading: true })
-          );
-          stele.position.set(0, 1.8, 0);
-          stele.castShadow = true;
-          group.add(stele);
-
-          // Balance Scales Beam
-          const bar = new THREE.Mesh(
-            new THREE.CylinderGeometry(0.08, 0.08, 2.6, 8),
-            new THREE.MeshStandardMaterial({ color: 0xff9f43 })
-          );
-          bar.rotation.z = Math.PI / 2;
-          bar.position.set(0, 3.2, 0.35);
-          group.add(bar);
-
-        } else if (idx === 5) {
-          // 6. Passport / Window to the World Shrine (Giant Blue Earth Globe)
-          const globe = new THREE.Mesh(
-            new THREE.SphereGeometry(1.5, 16, 16),
-            new THREE.MeshStandardMaterial({ color: 0x54a0ff, roughness: 0.3, flatShading: true })
-          );
-          globe.position.set(0, 2.4, 0);
-          globe.castShadow = true;
-          group.add(globe);
-
-          // Orbit Ring
-          const orbit = new THREE.Mesh(
-            new THREE.TorusGeometry(2.1, 0.15, 8, 24),
-            new THREE.MeshStandardMaterial({ color: 0xffffff, emissive: 0x54a0ff })
-          );
-          orbit.position.set(0, 2.4, 0);
-          orbit.rotation.x = Math.PI / 3;
-          group.add(orbit);
-        }
-
-        scene.add(group);
-
-        checkpointObjects.push({
-          group: group,
-          ring: ring,
-          beacon: beacon,
-          pos: cp.pos,
-          cleared: false
-        });
-      });
-    }
-
-    /* ---------------- Low-Poly Monsters & Stomp Mechanics ---------------- */
-    function spawnMonsters(count) {
-      for (let i = 0; i < count; i++) {
-        spawnSingleMonster();
+        depositBtn.className = "flex-1 py-3 bg-slate-300 text-slate-500 font-bold rounded-xl text-sm cursor-not-allowed";
+        depositBtn.onclick = null;
       }
     }
 
-    function spawnSingleMonster() {
-      // Pick random position across island (away from spawn point)
-      let x = 0, z = 0;
-      let safe = false;
-      while (!safe) {
-        x = (Math.random() - 0.5) * 80;
-        z = (Math.random() - 0.5) * 80;
-        const d = Math.sqrt(x*x + z*z);
-        if (d > 9 && d < 44) safe = true;
-      }
+    document.getElementById("btn-close-vault").onclick = () => {
+      document.getElementById("vault-modal").classList.add("hidden");
+      isModalOpen = false;
+    };
 
-      const monsterGroup = new THREE.Group();
+    function executeVaultDepositAnimation() {
+      if (isInsertingCoins) return;
+      isInsertingCoins = true;
+      isModalOpen = true;
 
-      // Slime/Blob Body (Octahedron or Sphere)
-      const colors = [0xff4757, 0x5352ed, 0xff6348, 0x1e90ff, 0x2ed573];
-      const mColor = colors[Math.floor(Math.random() * colors.length)];
-      const bodyGeo = new THREE.DodecahedronGeometry(0.65, 1);
-      const bodyMat = new THREE.MeshStandardMaterial({ color: mColor, roughness: 0.3, flatShading: true });
-      const body = new THREE.Mesh(bodyGeo, bodyMat);
-      body.position.y = 0.65;
-      body.castShadow = true;
-      monsterGroup.add(body);
+      // 觸發實體按鈕下壓反饋
+      buttonCap.position.y = 1.75;
+      setTimeout(() => buttonCap.position.y = 1.9, 300);
 
-      // Cute Eyes
-      const eyeGeo = new THREE.SphereGeometry(0.12, 8, 8);
-      const eyeMat = new THREE.MeshBasicMaterial({ color: 0x2f3542 });
-      const leftEye = new THREE.Mesh(eyeGeo, eyeMat);
-      leftEye.position.set(-0.22, 0.75, 0.5);
-      monsterGroup.add(leftEye);
+      // 播放投幣進箱動畫與金幣音效
+      spawnCoinInsertAnimation();
+      let clinkCount = 0;
+      const clinkInterval = setInterval(() => {
+        sound.playCoinClink();
+        clinkCount++;
+        if (clinkCount > 8) clearInterval(clinkInterval);
+      }, 120);
 
-      const rightEye = new THREE.Mesh(eyeGeo, eyeMat);
-      rightEye.position.set(0.22, 0.75, 0.5);
-      monsterGroup.add(rightEye);
+      // 延遲後頒發大獎與證書
+      setTimeout(() => {
+        isInsertingCoins = false;
+        sound.playFanfare();
+        confetti({ particleCount: 200, spread: 90, origin: { y: 0.6 } });
 
-      // Horn or Sprout
-      const hornGeo = new THREE.ConeGeometry(0.18, 0.4, 6);
-      const hornMat = new THREE.MeshStandardMaterial({ color: 0xfeca57, flatShading: true });
-      const horn = new THREE.Mesh(hornGeo, hornMat);
-      horn.position.set(0, 1.35, 0);
-      monsterGroup.add(horn);
+        document.getElementById("cert-player-name").textContent = playerName;
+        document.getElementById("cert-score").textContent = `${coins} 分 (特優)`;
+        document.getElementById("cert-monsters").textContent = `${stompCount} 隻`;
+        document.getElementById("cert-quests").textContent = `${clearedCount} / 6`;
 
-      monsterGroup.position.set(x, 0, z);
-      scene.add(monsterGroup);
+        const now = new Date();
+        document.getElementById("cert-date").textContent = `認證日期：${now.getFullYear()} 年 ${now.getMonth()+1} 月 ${now.getDate()} 日`;
 
-      monsters.push({
-        group: monsterGroup,
-        body: body,
-        pos: monsterGroup.position,
-        patrolAngle: Math.random() * Math.PI * 2,
-        patrolSpeed: 1.5 + Math.random() * 1.5,
-        bounceOffset: Math.random() * Math.PI,
-        state: 'alive', // 'alive', 'squished'
-        squishScale: 1.0
-      });
+        document.getElementById("cert-modal").classList.remove("hidden");
+      }, 1600);
     }
 
-    function createStompSparks(pos) {
-      for (let i = 0; i < 20; i++) {
-        const star = new THREE.Mesh(
-          new THREE.DodecahedronGeometry(0.16, 0),
-          new THREE.MeshBasicMaterial({ color: [0xffeaa7, 0xfdcb6e, 0xff7675, 0xffffff][Math.floor(Math.random()*4)] })
-        );
-        star.position.copy(pos);
-        star.position.y += 0.5;
-        const vel = new THREE.Vector3(
-          (Math.random() - 0.5) * 0.3,
-          0.15 + Math.random() * 0.3,
-          (Math.random() - 0.5) * 0.3
-        );
-        celebrationParticles.push({ mesh: star, vel: vel, life: 0.7 });
-        scene.add(star);
-      }
+    /* ---------------- 開局角色客製 ---------------- */
+    const btnFemale = document.getElementById("btn-pick-female");
+    const btnMale = document.getElementById("btn-pick-male");
+
+    btnFemale.onclick = () => {
+      selectedGender = "female";
+      btnFemale.className = "relative p-3 rounded-2xl border-4 border-pink-400 bg-pink-50 text-center transition-all shadow-sm";
+      btnMale.className = "relative p-3 rounded-2xl border-2 border-slate-200 bg-white text-center transition-all shadow-sm";
+      document.getElementById("check-female").classList.remove("hidden");
+      document.getElementById("check-male").classList.add("hidden");
+    };
+
+    btnMale.onclick = () => {
+      selectedGender = "male";
+      btnMale.className = "relative p-3 rounded-2xl border-4 border-sky-400 bg-sky-50 text-center transition-all shadow-sm";
+      btnFemale.className = "relative p-3 rounded-2xl border-2 border-slate-200 bg-white text-center transition-all shadow-sm";
+      document.getElementById("check-male").classList.remove("hidden");
+      document.getElementById("check-female").classList.add("hidden");
+    };
+
+    function startGameAction() {
+      sound.init();
+      const nameInput = document.getElementById("player-name-input").value.trim();
+      if (nameInput) playerName = nameInput;
+
+      document.getElementById("ui-player-title").textContent = `探險員：${playerName}`;
+      document.getElementById("ui-avatar-badge").textContent = (selectedGender === 'female') ? "👧" : "👦";
+
+      buildCharacter(selectedGender);
+      const startModal = document.getElementById("start-modal");
+      startModal.classList.add("hidden");
+      startModal.style.display = "none";
+      isModalOpen = false;
     }
 
-    /* ---------------- 3D Player Avatar with Articulated Limbs ---------------- */
-    function createPlayerAvatar() {
-      playerGroup = new THREE.Group();
+    const btnStart = document.getElementById("btn-start-game");
+    btnStart.addEventListener("click", startGameAction);
+    btnStart.addEventListener("pointerdown", startGameAction);
 
-      // Body (Torso)
-      const bodyGeo = new THREE.CylinderGeometry(0.48, 0.55, 0.9, 8);
-      const bodyMat = new THREE.MeshStandardMaterial({ color: 0x0984e3, flatShading: true });
-      const body = new THREE.Mesh(bodyGeo, bodyMat);
-      body.position.y = 1.0;
-      body.castShadow = true;
-      playerGroup.add(body);
+    document.getElementById("btn-roam-free").addEventListener("click", () => {
+      document.getElementById("cert-modal").classList.add("hidden");
+      isModalOpen = false;
+    });
 
-      // Head
-      const headGeo = new THREE.SphereGeometry(0.45, 12, 12);
-      const headMat = new THREE.MeshStandardMaterial({ color: 0xffd3b6, flatShading: true });
-      const head = new THREE.Mesh(headGeo, headMat);
-      head.position.y = 1.75;
-      head.castShadow = true;
-      playerGroup.add(head);
-
-      // Cute Adventure Hat
-      const hatGeo = new THREE.ConeGeometry(0.58, 0.45, 8);
-      const hatMat = new THREE.MeshStandardMaterial({ color: 0xf39c12, flatShading: true });
-      const hat = new THREE.Mesh(hatGeo, hatMat);
-      hat.position.set(0, 2.15, -0.05);
-      hat.rotation.z = -0.15;
-      playerGroup.add(hat);
-
-      // Backpack
-      const packGeo = new THREE.BoxGeometry(0.5, 0.65, 0.35);
-      const packMat = new THREE.MeshStandardMaterial({ color: 0xd35400, flatShading: true });
-      const pack = new THREE.Mesh(packGeo, packMat);
-      pack.position.set(0, 1.05, -0.42);
-      pack.castShadow = true;
-      playerGroup.add(pack);
-
-      // Legs
-      const legGeo = new THREE.CylinderGeometry(0.14, 0.14, 0.65, 6);
-      const legMat = new THREE.MeshStandardMaterial({ color: 0x2d3436, flatShading: true });
-
-      playerLeftLeg = new THREE.Mesh(legGeo, legMat);
-      playerLeftLeg.position.set(-0.24, 0.35, 0);
-      playerLeftLeg.castShadow = true;
-      playerGroup.add(playerLeftLeg);
-
-      playerRightLeg = new THREE.Mesh(legGeo, legMat);
-      playerRightLeg.position.set(0.24, 0.35, 0);
-      playerRightLeg.castShadow = true;
-      playerGroup.add(playerRightLeg);
-
-      playerGroup.position.copy(playerPos);
-      scene.add(playerGroup);
-    }
-
-    /* ---------------- Floating Clouds ---------------- */
-    function createFloatingClouds() {
-      const cloudMat = new THREE.MeshLambertMaterial({ color: 0xffffff, transparent: true, opacity: 0.85, flatShading: true });
-      for (let i = 0; i < 22; i++) {
-        const c = new THREE.Group();
-        const blobs = 3 + Math.floor(Math.random() * 3);
-        for (let b = 0; b < blobs; b++) {
-          const sphere = new THREE.Mesh(new THREE.DodecahedronGeometry(1.8 + Math.random()*1.2, 1), cloudMat);
-          sphere.position.set(b * 1.5, Math.random()*0.5, Math.random()*0.8);
-          c.add(sphere);
-        }
-        c.position.set((Math.random()-0.5)*160, 15 + Math.random()*9, (Math.random()-0.5)*160);
-        scene.add(c);
-      }
-    }
-
-    function spawnCelebrationFireworks(pos) {
-      for (let i = 0; i < 45; i++) {
-        const bit = new THREE.Mesh(
-          new THREE.BoxGeometry(0.3, 0.3, 0.3),
-          new THREE.MeshBasicMaterial({
-            color: [0xff4757, 0x2ed573, 0xffa502, 0x1e90ff, 0xffffff, 0xfd79a8, 0x5f27cd][Math.floor(Math.random()*7)]
-          })
-        );
-        bit.position.copy(pos);
-        bit.position.y += 1.8;
-        const vel = new THREE.Vector3(
-          (Math.random() - 0.5) * 0.45,
-          0.3 + Math.random() * 0.6,
-          (Math.random() - 0.5) * 0.45
-        );
-        celebrationParticles.push({ mesh: bit, vel: vel, life: 1.0 });
-        scene.add(bit);
-      }
-    }
-
-    /* ==========================================================
-       4. INPUT SYSTEM (KEYBOARD + TOUCH)
-       ========================================================== */
-    const keys = { up: false, down: false, left: false, right: false, jump: false };
-    let stepTimer = 0;
-
-    function setupInputHandlers() {
-      window.addEventListener('keydown', (e) => {
-        sound.init();
-        if (isModalOpen) return;
-
-        if (e.code === 'KeyW' || e.code === 'ArrowUp') keys.up = true;
-        if (e.code === 'KeyS' || e.code === 'ArrowDown') keys.down = true;
-        if (e.code === 'KeyA' || e.code === 'ArrowLeft') keys.left = true;
-        if (e.code === 'KeyD' || e.code === 'ArrowRight') keys.right = true;
-        if (e.code === 'Space') {
-          if (isGrounded) {
-            playerVelocity.y = 0.34;
-            isGrounded = false;
-            sound.playJump();
-          }
-        }
-        if (e.code === 'KeyE') {
-          if (nearCheckpointIndex >= 0 && !isModalOpen) {
-            openQuizModal(nearCheckpointIndex);
-          }
-        }
-      });
-
-      window.addEventListener('keyup', (e) => {
-        if (e.code === 'KeyW' || e.code === 'ArrowUp') keys.up = false;
-        if (e.code === 'KeyS' || e.code === 'ArrowDown') keys.down = false;
-        if (e.code === 'KeyA' || e.code === 'ArrowLeft') keys.left = false;
-        if (e.code === 'KeyD' || e.code === 'ArrowRight') keys.right = false;
-      });
-
-      // Mobile controls
-      const bindBtn = (id, keyName) => {
-        const el = document.getElementById(id);
-        if (!el) return;
-        const press = (ev) => { ev.preventDefault(); sound.init(); keys[keyName] = true; };
-        const release = (ev) => { ev.preventDefault(); keys[keyName] = false; };
-        el.addEventListener('touchstart', press, { passive: false });
-        el.addEventListener('touchend', release, { passive: false });
-        el.addEventListener('mousedown', press);
-        el.addEventListener('mouseup', release);
-      };
-      bindBtn('btn-up', 'up');
-      bindBtn('btn-down', 'down');
-      bindBtn('btn-left', 'left');
-      bindBtn('btn-right', 'right');
-
-      const btnJumpTouch = document.getElementById('btn-jump-touch');
-      btnJumpTouch.addEventListener('touchstart', (e) => {
-        e.preventDefault();
-        sound.init();
-        if (isGrounded) {
-          playerVelocity.y = 0.34;
-          isGrounded = false;
-          sound.playJump();
-        }
-      });
-
-      // Start modal confirmation
-      document.getElementById('btn-start-game').addEventListener('click', () => {
-        sound.init();
-        document.getElementById('start-modal').classList.add('hidden');
-        isModalOpen = false;
-        checkProximity();
-      });
-
-      document.getElementById('btn-open-quiz').addEventListener('click', () => {
-        if (nearCheckpointIndex >= 0) {
-          openQuizModal(nearCheckpointIndex);
-        }
-      });
-
-      // Help modal handlers
-      document.getElementById('btn-help').addEventListener('click', () => {
-        document.getElementById('help-modal').classList.remove('hidden');
-        document.getElementById('proximity-prompt').classList.add('hidden');
-        isModalOpen = true;
-      });
-      document.getElementById('btn-close-help').addEventListener('click', () => {
-        document.getElementById('help-modal').classList.add('hidden');
-        isModalOpen = false;
-        checkProximity();
-      });
-
-      const btnSound = document.getElementById('btn-sound');
-      btnSound.addEventListener('click', () => {
-        sound.init();
-        sound.enabled = !sound.enabled;
-        btnSound.innerHTML = sound.enabled
-          ? '<i class="fa-solid fa-volume-high text-base"></i>'
-          : '<i class="fa-solid fa-volume-xmark text-base text-rose-500"></i>';
-      });
-
-      document.getElementById('btn-roam-free').addEventListener('click', () => {
-        document.getElementById('victory-modal').classList.add('hidden');
-        isModalOpen = false;
-      });
-      document.getElementById('btn-restart').addEventListener('click', restartGame);
-    }
-
-    /* ==========================================================
-       5. GAME LOOP & ANIMATION (PLANAR 3D MOVEMENT + STOMPING)
-       ========================================================= */
+    /* ---------------- 主動畫與物理循環 ---------------- */
+    let walkCycle = 0;
     const clock = new THREE.Clock();
 
     function animate() {
       requestAnimationFrame(animate);
-
       const delta = clock.getDelta();
       const time = clock.getElapsedTime();
 
-      // Update Active Checkpoint Beacons
-      checkpointObjects.forEach((cpObj, idx) => {
-        if (idx === currentStage) {
-          cpObj.beacon.visible = true;
-          cpObj.beacon.material.opacity = 0.4 + Math.sin(time * 4) * 0.2;
-          cpObj.ring.rotation.z += 0.02;
+      // 金庫旋轉
+      bigCoin.rotation.y += 0.03;
+
+      // 投幣動態粒子更新 (金幣飛入投幣孔)
+      for (let i = flyingCoins.length - 1; i >= 0; i--) {
+        const fc = flyingCoins[i];
+        if (fc.delay > 0) {
+          fc.delay--;
+          continue;
+        }
+        fc.progress += fc.speed;
+        if (fc.progress >= 1) {
+          scene.remove(fc.mesh);
+          flyingCoins.splice(i, 1);
         } else {
-          cpObj.beacon.visible = false;
+          // 貝茲拋物線軌跡
+          const p = fc.progress;
+          fc.mesh.position.lerpVectors(fc.startPos, fc.targetPos, p);
+          fc.mesh.position.y += Math.sin(p * Math.PI) * fc.arcHeight;
+          fc.mesh.rotation.x += 0.2;
+          fc.mesh.rotation.y += 0.3;
         }
-      });
-
-      // 1. Planar 3D Player Movement
-      if (!isModalOpen) {
-        const moveDir = new THREE.Vector3();
-        if (keys.up) moveDir.z -= 1;
-        if (keys.down) moveDir.z += 1;
-        if (keys.left) moveDir.x -= 1;
-        if (keys.right) moveDir.x += 1;
-
-        if (moveDir.lengthSq() > 0) {
-          moveDir.normalize();
-          const speed = 12.0;
-          playerPos.x += moveDir.x * speed * delta;
-          playerPos.z += moveDir.z * speed * delta;
-
-          // Limit within island disk
-          const distFromCenter = Math.sqrt(playerPos.x * playerPos.x + playerPos.z * playerPos.z);
-          if (distFromCenter > 47.5) {
-            playerPos.x = (playerPos.x / distFromCenter) * 47.5;
-            playerPos.z = (playerPos.z / distFromCenter) * 47.5;
-          }
-
-          playerHeading = Math.atan2(moveDir.x, moveDir.z);
-          playerGroup.rotation.y = playerHeading;
-
-          legCycle += delta * 14;
-          playerLeftLeg.rotation.x = Math.sin(legCycle) * 0.7;
-          playerRightLeg.rotation.x = -Math.sin(legCycle) * 0.7;
-
-          stepTimer += delta;
-          if (stepTimer > 0.26 && isGrounded) {
-            sound.playStep();
-            stepTimer = 0;
-          }
-        } else {
-          playerLeftLeg.rotation.x = THREE.MathUtils.lerp(playerLeftLeg.rotation.x, 0, 0.2);
-          playerRightLeg.rotation.x = THREE.MathUtils.lerp(playerRightLeg.rotation.x, 0, 0.2);
-        }
-
-        // Jump & Gravity Physics
-        playerVelocity.y -= 0.85 * delta;
-        playerPos.y += playerVelocity.y;
-        if (playerPos.y <= 0) {
-          playerPos.y = 0;
-          playerVelocity.y = 0;
-          isGrounded = true;
-        }
-
-        playerGroup.position.copy(playerPos);
-
-        // 2. MONSTER PATROL & STOMPING COLLISION (Super Mario Style)
-        updateMonstersAndStomping(delta, time);
-
-        // Check Proximity to Current Active Checkpoint
-        checkProximity();
       }
 
-      // 3. Smooth Third-Person Camera Follow
+      if (!isModalOpen) {
+        const moveDir = new THREE.Vector3(0, 0, 0);
+        if (keys.w) moveDir.z -= 1;
+        if (keys.s) moveDir.z += 1;
+        if (keys.a) moveDir.x -= 1;
+        if (keys.d) moveDir.x += 1;
+
+        const isMoving = moveDir.lengthSq() > 0;
+        if (isMoving) {
+          moveDir.normalize();
+          const speed = 0.15;
+          playerGroup.position.x += moveDir.x * speed;
+          playerGroup.position.z += moveDir.z * speed;
+
+          const targetAngle = Math.atan2(moveDir.x, moveDir.z);
+          playerGroup.rotation.y = targetAngle;
+
+          walkCycle += 0.14;
+          if (leftLeg && rightLeg) {
+            leftLeg.rotation.x = Math.sin(walkCycle) * 0.55;
+            rightLeg.rotation.x = -Math.sin(walkCycle) * 0.55;
+          }
+          if (leftArm && rightArm) {
+            leftArm.rotation.x = -Math.sin(walkCycle) * 0.55;
+            rightArm.rotation.x = Math.sin(walkCycle) * 0.55;
+          }
+        } else {
+          if (leftLeg && rightLeg) {
+            leftLeg.rotation.x = 0;
+            rightLeg.rotation.x = 0;
+          }
+          if (leftArm && rightArm) {
+            leftArm.rotation.x = 0;
+            rightArm.rotation.x = 0;
+          }
+        }
+
+        // 跳躍與重力模擬
+        playerGroup.position.y += playerVelY;
+        if (!isGrounded) {
+          playerVelY += gravity;
+          if (playerGroup.position.y <= 0) {
+            playerGroup.position.y = 0;
+            playerVelY = 0;
+            isGrounded = true;
+          }
+        }
+
+        // 島嶼邊界約束
+        const distFromCenter = Math.sqrt(playerGroup.position.x ** 2 + playerGroup.position.z ** 2);
+        if (distFromCenter > 50) {
+          const ratio = 50 / distFromCenter;
+          playerGroup.position.x *= ratio;
+          playerGroup.position.z *= ratio;
+        }
+
+        // 踩扁小魔物檢測 (Mario Goomba Stomp)
+        monsters.forEach(m => {
+          if (!m.alive) return;
+          m.group.position.x += m.dir.x;
+          m.group.position.z += m.dir.z;
+          m.group.position.y = Math.abs(Math.sin(time * 3 + m.animOffset)) * 0.35;
+          if (m.group.position.length() > 48) m.dir.negate();
+
+          // 保持頭頂銘牌面向相機
+          const tagMesh = m.group.children[3];
+          if (tagMesh) tagMesh.lookAt(camera.position);
+
+          const dx = playerGroup.position.x - m.group.position.x;
+          const dz = playerGroup.position.z - m.group.position.z;
+          const horizontalDist = Math.sqrt(dx * dx + dz * dz);
+
+          if (horizontalDist < 1.4) {
+            if (!isGrounded && playerVelY < 0 && playerGroup.position.y > 0.35) {
+              m.alive = false;
+              sound.playStomp();
+              coins += 50;
+              stompCount++;
+              document.getElementById("ui-coins").textContent = `${coins} / 1200`;
+              document.getElementById("ui-progress").textContent = `考驗：${clearedCount}/6 關 ｜ 踩怪：${stompCount}/4`;
+              confetti({ particleCount: 35, spread: 55, origin: { y: 0.8 } });
+
+              // 壓扁紙片
+              m.group.scale.set(1.5, 0.15, 1.5);
+              setTimeout(() => scene.remove(m.group), 1500);
+
+              // 踩怪二段跳起
+              playerVelY = 0.32;
+            }
+          }
+        });
+
+        // 靠近關卡 / 投幣按鈕檢測
+        const promptEl = document.getElementById("interaction-prompt");
+        const promptText = document.getElementById("prompt-text");
+        const promptIcon = document.getElementById("prompt-icon");
+
+        // 檢查中央金庫與按鈕 (距離 6.5)
+        const distToVault = Math.sqrt(playerGroup.position.x ** 2 + playerGroup.position.z ** 2);
+        if (distToVault < 6.5) {
+          currentNearbyType = "vault";
+          promptEl.classList.remove("hidden");
+          promptIcon.textContent = "🪙";
+          promptText.textContent = "開啟中央金庫 (按 E 或點擊)";
+        } else {
+          // 檢查 6 大關卡
+          let nearQuest = null;
+          for (let q of questMeshes) {
+            const d = Math.sqrt((playerGroup.position.x - q.pos.x) ** 2 + (playerGroup.position.z - q.pos.z) ** 2);
+            if (d < 5.5) {
+              nearQuest = q;
+              break;
+            }
+          }
+
+          if (nearQuest) {
+            currentNearbyType = "quest";
+            currentNearbyQuest = nearQuest;
+            promptEl.classList.remove("hidden");
+            promptIcon.textContent = "📜";
+            promptText.textContent = `挑戰【${nearQuest.name}】(按 E 或點擊)`;
+
+            if (!nearQuest.autoTriggerTimer) {
+              nearQuest.autoTriggerTimer = setTimeout(() => {
+                if (currentNearbyQuest === nearQuest && !isModalOpen) {
+                  openQuiz(nearQuest);
+                }
+              }, 600);
+            }
+          } else {
+            if (currentNearbyQuest && currentNearbyQuest.autoTriggerTimer) {
+              clearTimeout(currentNearbyQuest.autoTriggerTimer);
+              currentNearbyQuest.autoTriggerTimer = null;
+            }
+            currentNearbyType = null;
+            currentNearbyQuest = null;
+            promptEl.classList.add("hidden");
+          }
+        }
+      }
+
+      // 相機平滑跟隨
       const targetCamPos = new THREE.Vector3(
-        playerPos.x,
-        playerPos.y + 8.0,
-        playerPos.z + 13.5
+        playerGroup.position.x,
+        playerGroup.position.y + 11,
+        playerGroup.position.z + 18
       );
       camera.position.lerp(targetCamPos, 0.08);
-      camera.lookAt(playerPos.x, playerPos.y + 1.2, playerPos.z);
-
-      // Water subtle ripples
-      if (waterMesh) {
-        waterMesh.rotation.z = Math.sin(time * 0.3) * 0.02;
-      }
-
-      // Celebration Particles
-      for (let i = celebrationParticles.length - 1; i >= 0; i--) {
-        const p = celebrationParticles[i];
-        p.mesh.position.add(p.vel);
-        p.vel.y -= 0.014;
-        p.life -= delta * 0.9;
-        p.mesh.scale.setScalar(Math.max(0.01, p.life));
-        if (p.life <= 0) {
-          scene.remove(p.mesh);
-          celebrationParticles.splice(i, 1);
-        }
-      }
+      camera.lookAt(playerGroup.position.x, playerGroup.position.y + 1.6, playerGroup.position.z);
 
       renderer.render(scene, camera);
     }
 
-    /* ---------------- Monster Patrol & Stomp Logic ---------------- */
-    function updateMonstersAndStomping(delta, time) {
-      for (let i = monsters.length - 1; i >= 0; i--) {
-        const m = monsters[i];
+    animate();
 
-        if (m.state === 'alive') {
-          // Monster bounce & wander AI
-          m.patrolAngle += (Math.random() - 0.5) * 0.06;
-          m.pos.x += Math.sin(m.patrolAngle) * m.patrolSpeed * delta;
-          m.pos.z += Math.cos(m.patrolAngle) * m.patrolSpeed * delta;
-
-          // Bounce vertically (living squishy feel)
-          m.pos.y = Math.abs(Math.sin(time * 5 + m.bounceOffset)) * 0.35;
-          m.group.rotation.y = m.patrolAngle;
-
-          // Stay within island boundary
-          const distC = Math.sqrt(m.pos.x * m.pos.x + m.pos.z * m.pos.z);
-          if (distC > 46) {
-            m.patrolAngle += Math.PI; // turn back
-          }
-
-          // Check distance to player
-          const distXZ = Math.hypot(playerPos.x - m.pos.x, playerPos.z - m.pos.z);
-          
-          if (distXZ < 1.35) {
-            // STOMP CHECK: Is player above monster and falling downward?
-            if (playerVelocity.y < 0 && playerPos.y > m.pos.y + 0.35) {
-              // Successfully stomped monster!
-              m.state = 'squished';
-              sound.playStomp();
-              createStompSparks(m.pos);
-
-              // Bounce player high in the air!
-              playerVelocity.y = 0.38;
-              isGrounded = false;
-
-              // Reward stats
-              stompedMonsters++;
-              coins += 50;
-              document.getElementById('monster-counter').innerText = stompedMonsters;
-              document.getElementById('coin-counter').innerText = coins;
-
-            } else if (isGrounded || playerPos.y <= m.pos.y + 0.35) {
-              // Gentle horizontal bump back
-              sound.playBump();
-              const bumpAngle = Math.atan2(playerPos.x - m.pos.x, playerPos.z - m.pos.z);
-              playerPos.x += Math.sin(bumpAngle) * 0.8;
-              playerPos.z += Math.cos(bumpAngle) * 0.8;
-              playerVelocity.y = 0.12;
-            }
-          }
-        } else if (m.state === 'squished') {
-          // Squish flattening animation
-          m.squishScale -= delta * 2.8;
-          m.group.scale.set(1.4, Math.max(0.05, m.squishScale), 1.4);
-          if (m.squishScale <= 0.05) {
-            scene.remove(m.group);
-            monsters.splice(i, 1);
-            // Respawn a new monster somewhere else after a short delay
-            setTimeout(spawnSingleMonster, 4000);
-          }
-        }
-      }
-    }
-
-    /* ==========================================================
-       6. CHECKPOINT PROXIMITY & HUD LOGIC
-       ========================================================== */
-    function checkProximity() {
-      const promptEl = document.getElementById('proximity-prompt');
-
-      if (isModalOpen || currentStage >= CHECKPOINTS.length) {
-        promptEl.classList.add('hidden');
-        if (currentStage >= CHECKPOINTS.length) {
-          document.getElementById('quest-stage-label').innerText = "六大考驗圓滿達成！";
-          document.getElementById('quest-objective-title').innerText = "你已精通所有戶政生活關鍵知識！";
-          document.getElementById('goal-distance').innerText = "0";
-        }
-        return;
-      }
-
-      const activeCP = CHECKPOINTS[currentStage];
-      const dist = playerPos.distanceTo(activeCP.pos);
-
-      document.getElementById('goal-distance').innerText = Math.round(dist);
-
-      const angle = Math.atan2(activeCP.pos.x - playerPos.x, activeCP.pos.z - playerPos.z) - camera.rotation.y;
-      const deg = -(angle * 180 / Math.PI);
-      document.getElementById('compass-arrow').style.transform = `rotate(${deg}deg)`;
-
-      // Proximity Trigger Zone (radius = 3.2 meters)
-      if (dist < 3.2) {
-        nearCheckpointIndex = currentStage;
-        promptEl.classList.remove('hidden');
-        document.getElementById('prompt-text').innerText = `已抵達【${activeCP.title.replace('前往', '')}】！點擊進入考驗`;
-        if (!hasAlertedProximity) {
-          sound.playProximityBeep();
-          hasAlertedProximity = true;
-        }
-      } else {
-        nearCheckpointIndex = -1;
-        promptEl.classList.add('hidden');
-        hasAlertedProximity = false;
-      }
-    }
-
-    /* ==========================================================
-       7. QUIZ MODAL & INTERACTIVE TEST (6 QUESTS)
-       ========================================================== */
-    function openQuizModal(idx) {
-      isModalOpen = true;
-      document.getElementById('proximity-prompt').classList.add('hidden');
-      const cp = CHECKPOINTS[idx];
-
-      document.getElementById('quiz-modal').classList.remove('hidden');
-      document.getElementById('modal-checkpoint-icon').innerText = cp.icon;
-      document.getElementById('modal-checkpoint-badge').innerText = cp.badge;
-      document.getElementById('modal-question').innerText = cp.question;
-      document.getElementById('modal-question-desc').innerText = cp.desc;
-
-      const feedback = document.getElementById('quiz-feedback');
-      feedback.innerText = "";
-
-      const grid = document.getElementById('quiz-options-grid');
-      grid.innerHTML = "";
-
-      cp.options.forEach((opt) => {
-        const btn = document.createElement('button');
-        btn.className = "py-3 px-4 rounded-2xl bg-white hover:bg-amber-100 border-2 border-amber-200 text-slate-800 font-bold text-xs sm:text-sm transition-all active:scale-95 shadow-sm flex items-center justify-center text-center";
-        btn.innerText = opt.text;
-
-        btn.onclick = () => {
-          handleQuizAnswer(opt, btn, idx);
-        };
-        grid.appendChild(btn);
-      });
-    }
-
-    function handleQuizAnswer(opt, btnEl, idx) {
-      const feedback = document.getElementById('quiz-feedback');
-
-      if (opt.correct) {
-        sound.playCorrect();
-        btnEl.className = "py-3 px-4 rounded-2xl bg-emerald-500 text-white font-extrabold text-xs sm:text-sm border-2 border-emerald-600 shadow-md";
-        feedback.innerText = "✨ " + opt.note;
-        feedback.className = "min-h-[26px] text-xs sm:text-sm font-bold text-emerald-600";
-
-        checkpointObjects[idx].cleared = true;
-        checkpointObjects[idx].ring.material.color.setHex(0x2ed573);
-        spawnCelebrationFireworks(playerPos);
-
-        coins += 150;
-        document.getElementById('coin-counter').innerText = coins;
-
-        const allBtns = document.getElementById('quiz-options-grid').querySelectorAll('button');
-        allBtns.forEach(b => b.disabled = true);
-
-        setTimeout(() => {
-          document.getElementById('quiz-modal').classList.add('hidden');
-          isModalOpen = false;
-          currentStage++;
-
-          if (currentStage < CHECKPOINTS.length) {
-            const nextCP = CHECKPOINTS[currentStage];
-            document.getElementById('quest-stage-label').innerText = `目前探索任務（第 ${currentStage + 1} / 6 關）`;
-            document.getElementById('quest-objective-title').innerText = nextCP.title;
-            document.getElementById('target-icon').innerText = nextCP.icon;
-          } else {
-            triggerVictoryCelebration();
-          }
-        }, 1800);
-
-      } else {
-        sound.playWrong();
-        btnEl.className = "py-3 px-4 rounded-2xl bg-rose-100 text-rose-700 font-bold text-xs sm:text-sm border-2 border-rose-300";
-        feedback.innerText = "💡 提示：" + opt.note;
-        feedback.className = "min-h-[26px] text-xs sm:text-sm font-bold text-rose-600";
-      }
-    }
-
-    function triggerVictoryCelebration() {
-      sound.playVictory();
-      document.getElementById('victory-modal').classList.remove('hidden');
-      isModalOpen = true;
-
-      for (let i = 0; i < 7; i++) {
-        setTimeout(() => {
-          spawnCelebrationFireworks(new THREE.Vector3(playerPos.x + (Math.random()-0.5)*12, 2, playerPos.z + (Math.random()-0.5)*12));
-        }, i * 320);
-      }
-    }
-
-    function restartGame() {
-      document.getElementById('victory-modal').classList.add('hidden');
-      currentStage = 0;
-      coins = 0;
-      stompedMonsters = 0;
-      document.getElementById('coin-counter').innerText = "0";
-      document.getElementById('monster-counter').innerText = "0";
-
-      playerPos.set(0, 0, 0);
-      playerGroup.position.copy(playerPos);
-
-      checkpointObjects.forEach((cpObj, idx) => {
-        cpObj.cleared = false;
-        cpObj.ring.material.color.setHex(CHECKPOINTS[idx].color);
-      });
-
-      const firstCP = CHECKPOINTS[0];
-      document.getElementById('quest-stage-label').innerText = "目前探索任務（第 1 / 6 關）";
-      document.getElementById('quest-objective-title').innerText = firstCP.title;
-      document.getElementById('target-icon').innerText = firstCP.icon;
-
-      isModalOpen = false;
-    }
-
-    /* ---------------- Window Resize ---------------- */
-    function onWindowResize() {
+    window.addEventListener("resize", () => {
       camera.aspect = window.innerWidth / window.innerHeight;
       camera.updateProjectionMatrix();
       renderer.setSize(window.innerWidth, window.innerHeight);
-    }
-
-    /* ==========================================================
-       8. INITIALIZATION
-       ========================================================== */
-    window.onload = function () {
-      init3D();
-      animate();
-    };
+    });
   </script>
 </body>
 </html>
