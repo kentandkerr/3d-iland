@@ -10,8 +10,8 @@
   <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
   <!-- Canvas Confetti -->
   <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"></script>
-  <!-- FontAwesome -->
-  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <!-- FontAwesome -->  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+
 
   <style>
     @import url('https://fonts.googleapis.com/css2?family=Fredoka:wght@500;700&family=Noto+Sans+TC:wght@500;700;900&display=swap');
@@ -109,9 +109,9 @@
 
   <!-- 手機跳躍按鈕 -->
   <div class="fixed bottom-6 right-6 z-20 md:hidden pointer-events-auto">
-    <button id="btn-jump" class="w-16 h-16 rounded-3xl bg-gradient-to-tr from-amber-400 to-orange-500 text-white font-black text-sm shadow-xl active:scale-90 border-2 border-white flex flex-col items-center justify-center">
-      <i class="fa-solid fa-arrow-up text-base"></i>
-      <span class="text-[10px]">跳躍</span>
+    <button id="btn-jump" type="button" class="w-16 h-16 rounded-3xl bg-gradient-to-tr from-amber-400 to-orange-500 text-white font-black text-sm shadow-xl active:scale-90 border-2 border-white flex flex-col items-center justify-center cursor-pointer select-none">
+      <i class="fa-solid fa-arrow-up text-base pointer-events-none"></i>
+      <span class="text-[10px] pointer-events-none">跳躍</span>
     </button>
   </div>
 
@@ -305,6 +305,9 @@
     let currentNearbyType = null;
     let currentNearbyQuest = null;
     let isInsertingCoins = false; // 是否正在撥放投幣動畫
+
+    // 初始化每個關卡的已通關狀態
+    QUESTS.forEach(q => { q.cleared = false; });
 
     /* ---------------- 聲音合成 (Web Audio API) ---------------- */
     class SoundEngine {
@@ -919,8 +922,8 @@
 
     const bindBtn = (id, k) => {
       const el = document.getElementById(id);
-      el.addEventListener("touchstart", (e) => { e.preventDefault(); sound.init(); keys[k] = true; });
-      el.addEventListener("touchend", (e) => { e.preventDefault(); keys[k] = false; });
+      el.addEventListener("touchstart", (e) => { e.preventDefault(); sound.init(); keys[k] = true; }, { passive: false });
+      el.addEventListener("touchend", (e) => { e.preventDefault(); keys[k] = false; }, { passive: false });
       el.addEventListener("mousedown", () => { sound.init(); keys[k] = true; });
       el.addEventListener("mouseup", () => { keys[k] = false; });
     };
@@ -929,41 +932,72 @@
     bindBtn("btn-left", "a");
     bindBtn("btn-right", "d");
 
-    const interactBtn = document.getElementById("btn-interact");
-    interactBtn.addEventListener("click", () => {
+    // 修復手機跳躍按鈕：使用獨立函數並全面支援 touchstart, pointerdown, click
+    function doJump() {
       sound.init();
-      triggerCurrentInteraction();
-    });
-    interactBtn.addEventListener("pointerdown", () => {
-      sound.init();
-      triggerCurrentInteraction();
-    });
-    interactBtn.addEventListener("touchstart", (e) => {
-      e.preventDefault();
-      sound.init();
-      triggerCurrentInteraction();
-    });
-
-    function triggerCurrentInteraction() {
-      if (currentNearbyType === "quest" && currentNearbyQuest) {
-        openQuiz(currentNearbyQuest);
-      } else if (currentNearbyType === "vault") {
-        openVaultModal();
+      if (!isModalOpen && isGrounded) {
+        playerVelY = 0.36;
+        isGrounded = false;
+        sound.playJump();
       }
     }
+    const jumpBtn = document.getElementById("btn-jump");
+    jumpBtn.addEventListener("touchstart", (e) => { e.preventDefault(); e.stopPropagation(); doJump(); }, { passive: false });
+    jumpBtn.addEventListener("pointerdown", (e) => { e.preventDefault(); doJump(); });
+    jumpBtn.addEventListener("click", (e) => { e.preventDefault(); doJump(); });
 
-    /* ---------------- 互動答題機制 ---------------- */
+    const interactBtn = document.getElementById("btn-interact");
+    /* ---------------- 互動答題機制 (防止重複作答刷分) ---------------- */
     function openQuiz(q) {
       isModalOpen = true;
       document.getElementById("interaction-prompt").classList.add("hidden");
       document.getElementById("quiz-modal").classList.remove("hidden");
-      document.getElementById("quiz-badge").textContent = `第 ${q.id} 關考驗・${q.name}`;
-      document.getElementById("quiz-title").textContent = q.q;
-      document.getElementById("quiz-desc").textContent = `答對可獲得 ${q.reward} 枚金幣！`;
-      document.getElementById("quiz-feedback").textContent = "";
-
+      
+      const badge = document.getElementById("quiz-badge");
+      const title = document.getElementById("quiz-title");
+      const desc = document.getElementById("quiz-desc");
+      const fb = document.getElementById("quiz-feedback");
       const optBox = document.getElementById("quiz-options");
       optBox.innerHTML = "";
+
+      if (q.cleared) {
+        badge.className = "inline-block bg-emerald-100 text-emerald-800 text-xs font-black px-3 py-1 rounded-full mb-2";
+        badge.textContent = `第 ${q.id} 關考驗・已通關`;
+        title.textContent = q.q;
+        desc.textContent = "✅ 本關卡獎勵已領取，不可重複獲得金幣！";
+        fb.className = "text-xs sm:text-sm font-extrabold text-emerald-600 mt-2";
+        fb.textContent = "此考驗已完成！請前往其他未挑戰關卡或踩怪集分！";
+
+        // 僅展示答案，不可再點擊加分
+        q.options.forEach((optText, idx) => {
+          const btn = document.createElement("button");
+          const isCorrect = (idx === q.ans);
+          btn.className = isCorrect 
+            ? "w-full text-left p-3.5 rounded-2xl border-2 border-emerald-500 bg-emerald-50 text-emerald-800 font-bold text-xs sm:text-sm shadow-sm cursor-default"
+            : "w-full text-left p-3.5 rounded-2xl border-2 border-slate-200 bg-slate-50 text-slate-400 font-bold text-xs sm:text-sm cursor-not-allowed opacity-60";
+          btn.textContent = `${['A','B','C','D'][idx]}. ${optText} ${isCorrect ? '✓ (正確解答)' : ''}`;
+          btn.disabled = true;
+          optBox.appendChild(btn);
+        });
+
+        // 加上關閉視窗按鈕
+        const closeBtn = document.createElement("button");
+        closeBtn.className = "w-full mt-3 py-2.5 bg-slate-800 hover:bg-slate-700 text-white font-bold rounded-xl text-xs sm:text-sm transition";
+        closeBtn.textContent = "返回冒險島";
+        closeBtn.onclick = () => {
+          document.getElementById("quiz-modal").classList.add("hidden");
+          isModalOpen = false;
+        };
+        optBox.appendChild(closeBtn);
+        return;
+      }
+
+      badge.className = "inline-block bg-amber-100 text-amber-800 text-xs font-black px-3 py-1 rounded-full mb-2";
+      badge.textContent = `第 ${q.id} 關考驗・${q.name}`;
+      title.textContent = q.q;
+      desc.textContent = `答對可獲得 ${q.reward} 枚金幣！（每題僅限領取一次）`;
+      fb.textContent = "";
+
       q.options.forEach((optText, idx) => {
         const btn = document.createElement("button");
         btn.className = "w-full text-left p-3.5 rounded-2xl border-2 border-amber-200 bg-white hover:bg-amber-50 font-bold text-xs sm:text-sm text-slate-800 transition active:scale-98 shadow-sm";
@@ -974,8 +1008,11 @@
     }
 
     function checkQuizAnswer(q, selectedIdx, clickedBtn) {
+      if (q.cleared) return; // 嚴防重複加分
+
       const fb = document.getElementById("quiz-feedback");
       if (selectedIdx === q.ans) {
+        q.cleared = true; // 鎖定狀態，永久不再給分
         sound.playCorrect();
         clickedBtn.className = "w-full text-left p-3.5 rounded-2xl border-2 border-emerald-500 bg-emerald-500 text-white font-black text-xs sm:text-sm shadow-md";
         fb.className = "text-xs sm:text-sm font-extrabold text-emerald-600 mt-2";
@@ -986,6 +1023,7 @@
         document.getElementById("ui-coins").textContent = `${coins} / 1200`;
         document.getElementById("ui-progress").textContent = `考驗：${clearedCount}/6 關 ｜ 踩怪：${stompCount}/4`;
 
+        // 將該關卡光圈永久變綠
         q.ring.material.color.setHex(0x22c55e);
 
         setTimeout(() => {
@@ -1275,10 +1313,12 @@
             currentNearbyType = "quest";
             currentNearbyQuest = nearQuest;
             promptEl.classList.remove("hidden");
-            promptIcon.textContent = "📜";
-            promptText.textContent = `挑戰【${nearQuest.name}】(按 E 或點擊)`;
+            promptIcon.textContent = nearQuest.cleared ? "✅" : "📜";
+            promptText.textContent = nearQuest.cleared 
+              ? `【${nearQuest.name}】已通關 (點擊查看)` 
+              : `挑戰【${nearQuest.name}】(按 E 或點擊)`;
 
-            if (!nearQuest.autoTriggerTimer) {
+            if (!nearQuest.cleared && !nearQuest.autoTriggerTimer) {
               nearQuest.autoTriggerTimer = setTimeout(() => {
                 if (currentNearbyQuest === nearQuest && !isModalOpen) {
                   openQuiz(nearQuest);
